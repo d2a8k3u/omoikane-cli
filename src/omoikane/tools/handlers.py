@@ -30,7 +30,6 @@ from omoikane.core.execution import choose_execution_mode
 from omoikane.core.orchestrator import TeamOrchestrator
 
 from .audit import capture_origin
-from .session import bind_from_handler_kwargs, bind_session_to_project
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +49,6 @@ def _ensure_project_cron_safe(project_id: str) -> Tuple[Optional[str], Optional[
 def _remove_project_cron_safe(project_id: str) -> Tuple[bool, Optional[str]]:
     """Phase-2 placeholder. See :func:`_ensure_project_cron_safe`."""
     return True, None
-
-
-def _bind_session(kwargs: dict, project_id: str) -> None:
-    """Best-effort session→project binding so handler self-emission works."""
-    bind_from_handler_kwargs(kwargs, project_id)
 
 
 def _capture_origin(kwargs: Optional[dict] = None) -> Optional[dict]:
@@ -98,7 +92,6 @@ def project_start(args: dict, **kwargs) -> str:
                 data={"origin": origin},
             )
 
-        _bind_session(kwargs, book.project_id)
         book.log("decision", f"Project started with {len(criteria)} acceptance criteria")
 
         # Kick the first orchestration iteration (bootstrap initial tasks).
@@ -664,7 +657,6 @@ def project_continue(args: dict, **kwargs) -> str:
         if book_data.get("status") == "done":
             return json.dumps({"error": "Project is already completed"})
 
-        _bind_session(kwargs, project_id)
         book.log("decision", "Project continuation requested")
 
         result = TeamOrchestrator(project_id).run_once()

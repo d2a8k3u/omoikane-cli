@@ -13,22 +13,25 @@ killing the loop.
 
 ## Status
 
-**Beta — Phase 8 complete.** All eight planned phases (0 SDK spike, 1 core
-extraction, 2 tools layer, 3 runtime, 4 daemon + supervisor, 5 TUI, 6
-approvals, 7 transports, 8 migration + polish) land in this tree. The
-optional Phase 9 dashboard remains deferred. See
+**Beta.** All eight planned phases (0 SDK spike, 1 core extraction, 2 tools
+layer, 3 runtime, 4 daemon + supervisor, 5 TUI, 6 approvals, 7 transports,
+8 migration + polish) land in this tree. A web dashboard was scoped but
+deliberately dropped — the textual TUI covers the operator UX. See
 `docs/phase0-spike-report.md` for the SDK feasibility analysis the design
 rests on.
 
 ## Install
 
 ```bash
-git clone https://github.com/davidkulh/omoikane.git
-cd omoikane
+git clone https://github.com/davidkulh/omoikane-cli.git
+cd omoikane-cli
 python3.11 -m venv .venv
 .venv/bin/pip install -e ".[runtime,tui,transport,dev]"
 .venv/bin/pytest tests/ -v
 ```
+
+The distribution is named `omoikane-cli`; the import package and the
+installed command both stay `omoikane`.
 
 The extras are intentionally narrow so a core-only contributor (someone who
 just wants to hack on the Book layer) does not need to bring the SDK,
@@ -39,7 +42,6 @@ textual, or httpx into their environment:
 | `runtime`    | Running the CTO (`start`, `resume`, `supervisor tick`) |
 | `tui`        | `omoikane open` (textual + watchfiles + rich) |
 | `transport`  | Telegram / Slack push (httpx)                 |
-| `dashboard`  | Phase 9 — currently a stub                    |
 | `dev`        | pytest, pytest-cov                            |
 
 ## Quick start
