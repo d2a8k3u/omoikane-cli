@@ -1,0 +1,35 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Local project data
+~/.omoikane/
+projects/
+*.local.toml
+.env
+.env.local
+
+# Spike artifacts
+spike/.venv/
+spike/*.log
