@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from omoikane.core.book import ProjectBook
@@ -34,7 +34,7 @@ _TERMINAL_STATUSES = frozenset({"done", "failed", "cancelled"})
 class SessionStop:
     """Co-operatively requests the CTO loop to exit."""
     reason: str = "stop_requested"
-    event: threading.Event = threading.Event()
+    event: threading.Event = field(default_factory=threading.Event)
 
     def request(self, reason: str = "stop_requested") -> None:
         self.reason = reason

@@ -1,6 +1,7 @@
 """AgentRun + cto_session — exercised with a fake AIAgent to avoid live LLM."""
 from __future__ import annotations
 
+import json
 import sys
 import types
 from typing import Any, Dict, List
@@ -155,6 +156,99 @@ def test_cto_session_respects_max_iterations(temp_hermes_home, fake_sdk):
         book.project_id, config=config, max_iterations=3,
     )
     assert iterations == 3
+
+
+class CallbackFiringAgent(FakeAIAgent):
+    """Fake that actually invokes the SDK callbacks AgentRun registers.
+
+    AgentRun passes its callbacks into ``AIAgent(**kwargs)`` (see
+    ``ensure_agent``). A real SDK calls them while a turn is running; this
+    fake captures them from the constructor kwargs and fires them inside
+    ``run_conversation`` so the emitter side-effects + the mid-iteration
+    ``_on_step`` inbox-drain/steer path are exercised (Finding C3).
+
+    ``on_step_extra`` lets a test stage operator input right before the
+    ``step_callback`` fires — modelling an operator typing mid-run."""
+
+    on_step_extra = None  # callable() -> None, run just before step_callback
+
+    def run_conversation(self, **kw):
+        cb = self.kwargs
+        sd = cb.get("stream_delta_callback")
+        if sd:
+            sd("hello world")
+        ts = cb.get("tool_start_callback")
+        if ts:
+            ts("tool.started", "shell", "ls -la", {"cmd": "ls -la"})
+        tc = cb.get("tool_complete_callback")
+        if tc:
+            tc("tool.completed", "shell", None, None, 12.5, False, "total 0")
+        if type(self).on_step_extra is not None:
+            type(self).on_step_extra()
+        step = cb.get("step_callback")
+        if step:
+            step()
+        return super().run_conversation(**kw)
+
+
+def test_callbacks_stream_delta_reaches_activity(temp_hermes_home, fake_sdk):
+    book = ProjectBook.create("brief", ["AC1"])
+    fake_sdk.AIAgent = CallbackFiringAgent
+    sys.modules["run_agent"].AIAgent = CallbackFiringAgent
+
+    run = _build_run(book)
+    run.run_iteration("directive", task_id="t-1")
+
+    text = _activity.for_project(book.project_id).path.read_text(encoding="utf-8")
+    assert "assistant_delta" in text
+    assert "hello world" in text
+
+
+def test_callbacks_tool_start_and_complete_reach_activity(temp_hermes_home, fake_sdk):
+    book = ProjectBook.create("brief", ["AC1"])
+    sys.modules["run_agent"].AIAgent = CallbackFiringAgent
+
+    run = _build_run(book)
+    run.run_iteration("directive", task_id="t-1")
+
+    lines = _activity.for_project(book.project_id).path.read_text(
+        encoding="utf-8"
+    ).splitlines()
+    kinds = {json.loads(line)["kind"] for line in lines if "actor" not in json.loads(line)}
+    assert "tool_call" in kinds
+    assert "tool_output" in kinds
+    # The tool name survived extraction from the positional callback form.
+    tool_lines = [json.loads(l) for l in lines if json.loads(l).get("kind") == "tool_call"]
+    assert any(rec.get("tool") == "shell" for rec in tool_lines)
+
+
+def test_on_step_drains_inbox_and_steers_mid_run(temp_hermes_home, fake_sdk):
+    """The operator-inject mechanism from the vision: a message that lands
+    *during* a turn must be drained by ``_on_step`` and pushed to
+    ``agent.steer`` as the formatted OPERATOR STEER block, with a matching
+    ``operator_steer`` activity event emitted."""
+    book = ProjectBook.create("brief", ["AC1"])
+
+    class _Agent(CallbackFiringAgent):
+        # Stage the operator message right before step_callback fires so the
+        # pre-iteration drain in run_iteration doesn't swallow it.
+        on_step_extra = staticmethod(
+            lambda: write_message(book.project_id, "switch to uuid v7", target="agent-cto")
+        )
+
+    sys.modules["run_agent"].AIAgent = _Agent
+
+    run = _build_run(book)
+    run.run_iteration("directive", task_id="t-1")
+
+    fake = fake_sdk.instances[-1]
+    # _on_step called agent.steer with the formatted inject block.
+    assert any("=== OPERATOR STEER ===" in s for s in fake.steers)
+    assert any("switch to uuid v7" in s for s in fake.steers)
+    # And the steer was mirrored into the activity stream.
+    text = _activity.for_project(book.project_id).path.read_text(encoding="utf-8")
+    assert "operator_steer" in text
+    assert "switch to uuid v7" in text
 
 
 def test_cto_session_stop_event_breaks_loop(temp_hermes_home, fake_sdk):

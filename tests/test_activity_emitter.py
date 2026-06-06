@@ -64,6 +64,43 @@ def test_emit_fans_out_book_log_for_semantic_kinds(temp_hermes_home):
     assert any("delegation_spawned" in line for line in book_lines)
 
 
+def _book_log_kinds(book) -> list[str]:
+    """Kinds that landed in the *Book* activity log via ``book.log``.
+
+    The emitter writes its own flat ``{ts, kind, ...}`` line to the same
+    ``activity.jsonl`` file, while ``ProjectBook.log`` (``append_activity``)
+    appends a record carrying an ``actor`` field. Filtering on ``actor``
+    isolates the fan-out records from the emitter's raw lines."""
+    kinds = []
+    for line in book.store.activity_path.read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        if "actor" in record:
+            kinds.append(record["kind"])
+    return kinds
+
+
+@pytest.mark.parametrize("kind", sorted(_activity._BOOK_EVENT_KINDS))
+def test_every_semantic_kind_fans_out_to_book_log(temp_hermes_home, kind):
+    book = ProjectBook.create("brief", ["AC1"])
+    emitter = _activity.for_project(book.project_id)
+
+    emitter.emit(kind, {"summary": f"{kind} happened"})
+
+    assert kind in _book_log_kinds(book)
+
+
+@pytest.mark.parametrize(
+    "kind", ["assistant_delta", "tool_call", "tool_output", "status", "notice"],
+)
+def test_non_semantic_kinds_do_not_fan_out(temp_hermes_home, kind):
+    book = ProjectBook.create("brief", ["AC1"])
+    emitter = _activity.for_project(book.project_id)
+
+    emitter.emit(kind, {"summary": f"{kind} happened"})
+
+    assert kind not in _book_log_kinds(book)
+
+
 def test_for_project_caches_per_project(temp_hermes_home):
     book = ProjectBook.create("brief", ["AC1"])
     one = _activity.for_project(book.project_id)
