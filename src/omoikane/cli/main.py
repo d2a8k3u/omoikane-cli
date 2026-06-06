@@ -27,6 +27,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     from .commands import init as init_cmd
     from .commands import inject as inject_cmd
     from .commands import list as list_cmd
+    from .commands import open as open_cmd
     from .commands import resume as resume_cmd
     from .commands import start as start_cmd
     from .commands import status as status_cmd
@@ -36,6 +37,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     return [
         ("start", start_cmd.add_subparser, start_cmd.run),
         ("resume", resume_cmd.add_subparser, resume_cmd.run),
+        ("open", open_cmd.add_subparser, open_cmd.run),
         ("stop", stop_cmd.add_subparser, stop_cmd.run),
         ("supervisor", supervisor_cmd.add_subparser, supervisor_cmd.run),
         ("init-project", init_cmd.add_subparser, init_cmd.run),
