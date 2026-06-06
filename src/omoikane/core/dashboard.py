@@ -7,6 +7,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from omoikane.config import paths
+
 from . import store as _store
 
 
@@ -55,7 +57,7 @@ class DashboardProvider:
             pid = row["id"]
             health = {"color": "grey", "label": "unknown", "reason": None}
             try:
-                book_path = _store.PROJECT_ROOT / pid / "book.json"
+                book_path = paths.project_dir(pid) / "book.json"
                 if book_path.exists():
                     with open(book_path) as fh:
                         health = _health_indicator(json.load(fh))
@@ -73,7 +75,7 @@ class DashboardProvider:
 
     def project_detail(self, project_id: str) -> Dict[str, Any]:
         """Return detailed information about one project."""
-        book_path = _store.PROJECT_ROOT / project_id / "book.json"
+        book_path = paths.project_dir(project_id) / "book.json"
         if not book_path.exists():
             return {"error": "Project not found"}
 
@@ -94,7 +96,7 @@ class DashboardProvider:
 
     def delegation_tree(self, project_id: str) -> Dict[str, Any]:
         """Return delegation tree for visualization."""
-        delegation_path = _store.PROJECT_ROOT / project_id / "delegation.json"
+        delegation_path = paths.project_dir(project_id) / "delegation.json"
         if delegation_path.exists():
             with open(delegation_path) as f:
                 return json.load(f)
@@ -102,7 +104,7 @@ class DashboardProvider:
 
     def tail_activity(self, project_id: str, after_ts: Optional[str] = None, limit: int = 20) -> List[Dict]:
         """Return recent activity entries (tail of activity.jsonl)."""
-        activity_path = _store.PROJECT_ROOT / project_id / "activity.jsonl"
+        activity_path = paths.project_dir(project_id) / "activity.jsonl"
         if not activity_path.exists():
             return []
 
