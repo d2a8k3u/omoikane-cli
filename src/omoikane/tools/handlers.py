@@ -104,9 +104,11 @@ def project_start(args: dict, **kwargs) -> str:
         # Kick the first orchestration iteration (bootstrap initial tasks).
         first_tick = TeamOrchestrator(book.project_id).run_once()
 
-        # Spin up the per-project supervisor cron so the team gets nudged
-        # autonomously from this point on. Failure here MUST NOT abort the
-        # project — the global supervisor's reconcile pass will adopt it.
+        # Intentional Phase-2 no-op: _ensure_project_cron_safe returns
+        # (None, None). Per-project cron records were removed from the design;
+        # the Phase-4 global supervisor (omoikane.supervisor) owns scheduling
+        # and iterates all projects from the SQLite index on each tick. The
+        # returned keys are kept for return-shape compatibility.
         cron_id, cron_err = _ensure_project_cron_safe(book.project_id)
 
         return json.dumps({

@@ -93,3 +93,43 @@ def test_registered_tools_are_callable_and_persist(temp_hermes_home):
 
     activity_lines = (book.store.activity_path).read_text().splitlines()
     assert any("smoke-test entry" in line for line in activity_lines)
+
+
+def test_project_start_round_trip_through_registry(temp_hermes_home):
+    """Dispatch the highest-value handler (project_start) through the live SDK
+    registry: it must capture origin into book.json and return the cron no-op
+    return shape (supervisor_cron_id / supervisor_cron_error both None).
+
+    This pins both the return-shape contract AND the intentional Phase-2 cron
+    deferral that no other test exercises through the registry.
+    """
+    sdk_registry = _import_sdk_registry()
+
+    import json
+
+    from omoikane.core.book import ProjectBook
+    from omoikane.tools import register_book_tools, reset_registration_for_tests
+
+    reset_registration_for_tests()
+    register_book_tools(override=True)
+
+    entry = next(
+        t for t in sdk_registry._tools.values() if t.name == "project_start"
+    )
+    out = entry.handler(
+        {"brief": "round-trip brief", "acceptance_criteria": ["AC1", "AC2"]},
+        origin={"platform": "cli", "chat_id": "x"},
+    )
+    payload = json.loads(out)
+
+    assert payload.get("project_id")
+    assert payload.get("status")
+    assert "supervisor_cron_id" in payload
+    assert "supervisor_cron_error" in payload
+    assert payload["supervisor_cron_id"] is None
+    assert payload["supervisor_cron_error"] is None
+
+    origin = ProjectBook(payload["project_id"]).load().get("origin")
+    assert origin is not None
+    assert origin["platform"] == "cli"
+    assert origin["chat_id"] == "x"
