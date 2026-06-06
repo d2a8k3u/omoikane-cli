@@ -28,6 +28,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     from .commands import init as init_cmd
     from .commands import inject as inject_cmd
     from .commands import list as list_cmd
+    from .commands import migrate as migrate_cmd
     from .commands import open as open_cmd
     from .commands import resume as resume_cmd
     from .commands import start as start_cmd
@@ -46,6 +47,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
         ("status", status_cmd.add_subparser, status_cmd.run),
         ("list", list_cmd.add_subparser, list_cmd.run),
         ("inject", inject_cmd.add_subparser, inject_cmd.run),
+        ("migrate-from-hermes", migrate_cmd.add_subparser, migrate_cmd.run),
     ]
 
 
