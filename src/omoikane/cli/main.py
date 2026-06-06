@@ -24,6 +24,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     still loads the top-level parser. Each tuple is
     ``(name, add_subparser_fn, run_fn)``.
     """
+    from .commands import approvals as approvals_cmd
     from .commands import init as init_cmd
     from .commands import inject as inject_cmd
     from .commands import list as list_cmd
@@ -40,6 +41,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
         ("open", open_cmd.add_subparser, open_cmd.run),
         ("stop", stop_cmd.add_subparser, stop_cmd.run),
         ("supervisor", supervisor_cmd.add_subparser, supervisor_cmd.run),
+        ("approvals", approvals_cmd.add_subparser, approvals_cmd.run),
         ("init-project", init_cmd.add_subparser, init_cmd.run),
         ("status", status_cmd.add_subparser, status_cmd.run),
         ("list", list_cmd.add_subparser, list_cmd.run),

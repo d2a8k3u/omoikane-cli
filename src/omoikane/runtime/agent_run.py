@@ -84,7 +84,14 @@ class AgentRun:
             self.toolsets = role_toolsets.toolsets_for(role, overrides=self.config.role_overrides)
 
         builder = system_prompt_builder or _prompts.build_cto_system_prompt
-        self.system_prompt = builder(project_id, book, enabled_toolsets=self.toolsets)
+        base_prompt = builder(project_id, book, enabled_toolsets=self.toolsets)
+        # Phase 6: every role with terminal-class access gets the
+        # specialist self-gating addendum so a dangerous command stops
+        # at book_request_approval instead of running unconditionally.
+        addendum = _prompts.approval_addendum(role, self.toolsets)
+        self.system_prompt = (
+            f"{base_prompt}\n\n{addendum}".strip() if addendum else base_prompt
+        )
 
         self._agent: Any = None  # lazy AIAgent
 

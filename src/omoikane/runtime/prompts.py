@@ -193,6 +193,40 @@ def prepend_injects(message: str, injects: List[Mapping[str, Any]]) -> str:
     return f"{block}\n\n{message}"
 
 
+_APPROVAL_TOOLSETS = frozenset({"terminal", "code_execution"})
+
+APPROVAL_ADDENDUM_TEMPLATE = textwrap.dedent("""
+    Approval self-gating
+    --------------------
+
+    Before running ANY of the following, you MUST call
+    ``book_request_approval(project_id=…, requester_role={role!r},
+    action="execute_command", command=<exact-command>, reason=<one-sentence-why>)``
+    and stop with a summary that contains ``requires_approval=true``:
+
+    * destructive shell verbs — ``rm -rf``, ``find … -delete``, ``shred``
+    * write-side git operations — ``git push --force``, ``git reset --hard``,
+      ``git clean -fdx``, ``git branch -D``
+    * unauthenticated network execution — ``curl … | sh``, ``wget … | bash``
+    * permissions / ownership — ``sudo``, ``chmod -R``, ``chown -R``
+    * package mutations — ``apt``, ``yum``, ``pip install --upgrade``,
+      ``npm publish``, ``yarn upgrade --latest``
+    * filesystem writes outside the project workspace
+    * any network egress to a host not on the operator's allowlist
+
+    Once you have filed the approval, do NOT retry the blocked command. The
+    orchestrator pauses dispatch until the operator resolves it. The supervisor
+    will re-dispatch your task only after the command pattern is approved.
+""").strip()
+
+
+def approval_addendum(role: str, enabled_toolsets: List[str]) -> str:
+    """Return the self-gating block, or '' for roles without risky toolsets."""
+    if any(ts in _APPROVAL_TOOLSETS for ts in enabled_toolsets):
+        return APPROVAL_ADDENDUM_TEMPLATE.format(role=role)
+    return ""
+
+
 def cto_history_path(project_id: str):
     """Return the on-disk location for the CTO ``conversation_history``.
 
@@ -221,8 +255,10 @@ def save_cto_history(project_id: str, history: List[Dict[str, Any]]) -> None:
 
 
 __all__ = [
+    "APPROVAL_ADDENDUM_TEMPLATE",
     "INJECT_END",
     "INJECT_START",
+    "approval_addendum",
     "build_cto_system_prompt",
     "build_followup_directive",
     "build_initial_directive",

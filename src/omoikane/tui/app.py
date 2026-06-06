@@ -38,6 +38,7 @@ from omoikane.core.book import ProjectBook
 from omoikane.orchestrator import daemon as _daemon
 from omoikane.runtime.injection import write_message
 from omoikane.tui.widgets.activity_pane import ActivityPane
+from omoikane.tui.widgets.approvals_pane import ApprovalsPane
 from omoikane.tui.widgets.criteria_pane import CriteriaPane
 from omoikane.tui.widgets.delegation_pane import DelegationPane
 from omoikane.tui.widgets.input_bar import InputBar
@@ -60,6 +61,8 @@ class OmoikaneApp(App):
         Binding("ctrl+c", "detach", "Detach (keep daemon)", show=True, priority=True),
         Binding("ctrl+d", "stop_daemon", "Stop daemon", show=True),
         Binding("f1", "show_help", "Help", show=True),
+        Binding("f2", "approve_selected", "Approve", show=True),
+        Binding("f3", "deny_selected", "Deny", show=True),
         Binding("f5", "force_refresh", "Refresh", show=False),
     ]
 
@@ -94,6 +97,7 @@ class OmoikaneApp(App):
             with Vertical(id="side-column"):
                 yield DelegationPane(self.delegation_path, id="delegation-pane")
                 yield CriteriaPane(id="criteria-pane")
+                yield ApprovalsPane(id="approvals-pane")
         yield InputBar(self.project_id, id="input-bar")
 
     # ------------------------------------------------------------------
@@ -171,6 +175,7 @@ class OmoikaneApp(App):
             return
         self.query_one(CriteriaPane).update_from_book(data)
         self.query_one(DelegationPane).refresh_tree()
+        self.query_one(ApprovalsPane).update_from_book(data)
 
     # ------------------------------------------------------------------
     # Operator interactions
@@ -221,6 +226,39 @@ class OmoikaneApp(App):
     def action_force_refresh(self) -> None:
         self._drain_activity()
         self._render_status()
+        self._render_book_dependent()
+
+    def action_approve_selected(self) -> None:
+        self._resolve_selected("approve")
+
+    def action_deny_selected(self) -> None:
+        self._resolve_selected("deny")
+
+    def _resolve_selected(self, decision: str) -> None:
+        pane = self.query_one(ApprovalsPane)
+        approval = pane.selected_approval()
+        if not approval:
+            self.notify("no pending approval selected", severity="warning")
+            return
+        aid = approval.get("approval_id")
+        if not aid:
+            return
+        try:
+            entry = self.book_handle.resolve_approval(
+                approval_id=aid, decision=decision, note="tui",
+            )
+        except ValueError as exc:
+            self.notify(f"resolve failed: {exc}", severity="warning")
+            return
+        if entry is None:
+            self.notify(
+                f"approval {aid} not found", severity="warning",
+            )
+            return
+        self.notify(
+            f"{decision}d {aid}",
+            severity="information" if decision == "approve" else "warning",
+        )
         self._render_book_dependent()
 
 
