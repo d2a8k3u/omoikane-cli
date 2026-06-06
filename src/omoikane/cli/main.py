@@ -30,10 +30,14 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     from .commands import resume as resume_cmd
     from .commands import start as start_cmd
     from .commands import status as status_cmd
+    from .commands import stop as stop_cmd
+    from .commands import supervisor as supervisor_cmd
 
     return [
         ("start", start_cmd.add_subparser, start_cmd.run),
         ("resume", resume_cmd.add_subparser, resume_cmd.run),
+        ("stop", stop_cmd.add_subparser, stop_cmd.run),
+        ("supervisor", supervisor_cmd.add_subparser, supervisor_cmd.run),
         ("init-project", init_cmd.add_subparser, init_cmd.run),
         ("status", status_cmd.add_subparser, status_cmd.run),
         ("list", list_cmd.add_subparser, list_cmd.run),

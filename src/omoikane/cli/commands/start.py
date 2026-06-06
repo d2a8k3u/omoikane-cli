@@ -51,9 +51,13 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--foreground", action="store_true",
+        help="Run the CTO attached to the current terminal.",
+    )
+    parser.add_argument(
+        "--detach", action="store_true",
         help=(
-            "Run the CTO attached to the current terminal. The default for "
-            "Phase 3 — daemon mode lands with Phase 4."
+            "Spawn a background daemon for the CTO via a double-fork. "
+            "The daemon's stdout/stderr land in orchestrator.log."
         ),
     )
     parser.add_argument(
@@ -112,22 +116,45 @@ def run(args: argparse.Namespace) -> int:
         )
         return 0
 
-    if not args.foreground:
-        print(
-            "Daemon mode lands with Phase 4 — re-run with --foreground to "
-            "drive the CTO attached to this terminal.",
-            file=sys.stderr,
-        )
-        return 0
-
-    from omoikane.orchestrator.loop import run_foreground
-
     config = RunConfig(
         model=args.model,
         api_key=api_key,
         provider=args.provider,
         max_iterations=args.max_iterations,
     )
+
+    if args.foreground and args.detach:
+        print("--foreground and --detach are mutually exclusive", file=sys.stderr)
+        return 2
+
+    if args.detach:
+        from omoikane.orchestrator.daemon import (
+            AlreadyRunningError,
+            OrchestratorDaemon,
+        )
+        try:
+            pid = OrchestratorDaemon.start(
+                project_id,
+                config=config,
+                max_iterations=args.max_iterations,
+                detach=True,
+            )
+        except AlreadyRunningError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(f"daemon started: pid={pid}")
+        return 0
+
+    if not args.foreground:
+        print(
+            "Re-run with --foreground or --detach to start the CTO. "
+            "The project is created on disk; use `omoikane status <pid>` to inspect.",
+            file=sys.stderr,
+        )
+        return 0
+
+    from omoikane.orchestrator.loop import run_foreground
+
     iterations = run_foreground(
         project_id,
         config=config,
