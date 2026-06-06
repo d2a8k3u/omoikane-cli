@@ -5,6 +5,8 @@ import asyncio
 import json
 
 import pytest
+from textual.app import App, ComposeResult
+from textual.widgets import Static
 
 from omoikane.core.book import ProjectBook
 from omoikane.tui.app import OmoikaneApp
@@ -36,7 +38,19 @@ async def test_app_mounts_and_streams_activity(temp_hermes_home):
         await pilot.press("ctrl+c")
 
 
-def test_criteria_pane_renders_marker_for_satisfied(temp_hermes_home):
+class _SingleWidgetHost(App):
+    """Throwaway host that mounts exactly one widget for assertions."""
+
+    def __init__(self, widget):
+        super().__init__()
+        self._widget = widget
+
+    def compose(self) -> ComposeResult:
+        yield self._widget
+
+
+@pytest.mark.asyncio
+async def test_criteria_pane_renders_marker_for_satisfied(temp_hermes_home):
     from omoikane.tui.widgets.criteria_pane import CriteriaPane
 
     book = ProjectBook.create("brief", ["First criterion", "Second criterion"])
@@ -44,33 +58,29 @@ def test_criteria_pane_renders_marker_for_satisfied(temp_hermes_home):
     data = book.load()
 
     pane = CriteriaPane()
-    # We can't call update_from_book without a mounted Static; instead
-    # exercise the formatting helper indirectly via Text construction.
-    from rich.text import Text
-    text = Text()
-    for idx, item in enumerate(data["acceptance_criteria"]):
-        satisfied = data["criteria_status"].get(str(idx)) == "satisfied"
-        marker = "[x]" if satisfied else "[ ]"
-        text.append(f"{marker} ({idx}) {item}\n")
-    rendered = text.plain
+    async with _SingleWidgetHost(pane).run_test() as pilot:
+        pane.update_from_book(data)
+        await pilot.pause()
+        body = pane.query_one("#criteria-body", Static)
+        rendered = body.visual.plain
+
     assert "[x] (0) First criterion" in rendered
     assert "[ ] (1) Second criterion" in rendered
 
 
-def test_status_bar_text_includes_status_and_phase(temp_hermes_home):
+@pytest.mark.asyncio
+async def test_status_bar_text_includes_status_and_phase(temp_hermes_home):
     from omoikane.tui.widgets.status_bar import StatusBar
 
     book = ProjectBook.create("brief", ["AC"])
     data = book.load()
+
     bar = StatusBar()
-    # Build the Rich text mirror of update_from_book to verify content.
-    from rich.text import Text
-    text = Text()
-    text.append("● ", style="green")
-    text.append(data["title"], style="bold")
-    text.append(f"  status={data['status']}", style="dim")
-    text.append(f"  phase={data['current_phase']}", style="dim")
-    plain = text.plain
+    async with _SingleWidgetHost(bar).run_test() as pilot:
+        bar.update_from_book(data, daemon_running=False)
+        await pilot.pause()
+        plain = bar.visual.plain
+
     assert data["title"] in plain
-    assert data["status"] in plain
-    assert data["current_phase"] in plain
+    assert f"status={data['status']}" in plain
+    assert f"phase={data['current_phase']}" in plain
