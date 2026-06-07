@@ -807,6 +807,32 @@ class ProjectBook:
             return True
         return False
 
+    def record_result(
+        self,
+        task: str,
+        status: str,
+        reflection: Optional[str] = None,
+    ) -> Optional[str]:
+        """Close a delegation edge: log the result, store the reflection, and
+        record the outcome on the delegation tree.
+
+        Mirrors the ``book_record_result`` tool handler so the deterministic
+        orchestration driver can close tasks itself without depending on the
+        agent to call the tool. Returns the reflection ref (if any).
+        """
+        self.log(
+            kind="result",
+            summary=f"Task {task} finished with status={status}",
+            data={"status": status, "reflection": reflection},
+        )
+        reflection_ref = self.reflect(lesson=reflection, task=task) if reflection else None
+        self.store.record_delegation_result(
+            task=task,
+            status=status,
+            reflection_ref=reflection_ref,
+        )
+        return reflection_ref
+
     def complete_task(self, task_id: str) -> bool:
         """Move a task from open to completed. Returns False if not open.
 

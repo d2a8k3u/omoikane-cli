@@ -240,25 +240,7 @@ def book_record_result(args: dict, **kwargs) -> str:
             return json.dumps({"error": "Missing required fields"})
 
         book = ProjectBook(project_id)
-        book.log(
-            kind="result",
-            summary=f"Task {task} finished with status={status}",
-            data={
-                "status": status,
-                "reflection": reflection,
-            },
-        )
-
-        reflection_ref = None
-        if reflection:
-            reflection_ref = book.reflect(lesson=reflection, task=task)
-
-        # Close the matching delegation edge (spec §5.5)
-        book.store.record_delegation_result(
-            task=task,
-            status=status,
-            reflection_ref=reflection_ref,
-        )
+        reflection_ref = book.record_result(task=task, status=status, reflection=reflection)
 
         return json.dumps({"success": True, "recorded": True, "reflection_ref": reflection_ref})
 
