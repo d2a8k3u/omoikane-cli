@@ -49,6 +49,14 @@ def systemd_timer_path() -> Path:
 # ----------------------------------------------------------------------
 
 def _resolve_binary() -> str:
+    # Frozen binary: use the stable ``~/.omoikane/bin/omoikane`` symlink so
+    # scheduled units survive self-update. ``sys.executable`` would resolve
+    # *through* the symlink to a version-pinned path that breaks on the next
+    # update, and ``-m`` is meaningless in a frozen app.
+    if getattr(sys, "frozen", False):
+        from omoikane.config import paths
+
+        return str(paths.binary_path())
     binary = shutil.which("omoikane")
     if binary:
         return binary
