@@ -69,6 +69,9 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
+          # Treat the whole 0.x series (and any rc/beta/alpha tag) as a
+          # prerelease; flip automatically once a v1.x tag is cut.
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           files: |
             ${{ matrix.asset }}
             ${{ matrix.asset }}.sha256
