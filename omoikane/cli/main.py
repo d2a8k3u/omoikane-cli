@@ -16,10 +16,10 @@ import sys
 from typing import Callable, List, Tuple
 
 
-def _commands() -> List[Tuple[str, Callable, Callable]]:
+def _commands() -> List[Tuple[str, str, Callable, Callable]]:
     """Lazy-import each subcommand so a partial install (e.g. missing SDK)
     still loads the top-level parser. Each tuple is
-    ``(name, add_subparser_fn, run_fn)``.
+    ``(name, summary, add_subparser_fn, run_fn)``.
     """
     from .commands import approvals as approvals_cmd
     from .commands import delete as delete_cmd
@@ -36,19 +36,32 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     from .commands import supervisor as supervisor_cmd
 
     return [
-        ("start", start_cmd.add_subparser, start_cmd.run),
-        ("resume", resume_cmd.add_subparser, resume_cmd.run),
-        ("open", open_cmd.add_subparser, open_cmd.run),
-        ("stop", stop_cmd.add_subparser, stop_cmd.run),
-        ("supervisor", supervisor_cmd.add_subparser, supervisor_cmd.run),
-        ("approvals", approvals_cmd.add_subparser, approvals_cmd.run),
-        ("init-project", init_cmd.add_subparser, init_cmd.run),
-        ("delete-project", delete_cmd.add_subparser, delete_cmd.run),
-        ("status", status_cmd.add_subparser, status_cmd.run),
-        ("list", list_cmd.add_subparser, list_cmd.run),
-        ("inject", inject_cmd.add_subparser, inject_cmd.run),
-        ("migrate-from-hermes", migrate_cmd.add_subparser, migrate_cmd.run),
-        ("self-update", self_update_cmd.add_subparser, self_update_cmd.run),
+        ("start", "Create a project and optionally run the CTO loop.",
+         start_cmd.add_subparser, start_cmd.run),
+        ("resume", "Resume an existing project's CTO loop from saved history.",
+         resume_cmd.add_subparser, resume_cmd.run),
+        ("open", "Attach the live TUI to a project.",
+         open_cmd.add_subparser, open_cmd.run),
+        ("stop", "Stop a project's orchestrator daemon.",
+         stop_cmd.add_subparser, stop_cmd.run),
+        ("supervisor", "Manage the background health-check schedule.",
+         supervisor_cmd.add_subparser, supervisor_cmd.run),
+        ("approvals", "Review and resolve gated actions.",
+         approvals_cmd.add_subparser, approvals_cmd.run),
+        ("init-project", "Create a project book without running the CTO.",
+         init_cmd.add_subparser, init_cmd.run),
+        ("delete-project", "Permanently delete a project (directory + index).",
+         delete_cmd.add_subparser, delete_cmd.run),
+        ("status", "Show a project's book and phase summary.",
+         status_cmd.add_subparser, status_cmd.run),
+        ("list", "List all known projects from the index.",
+         list_cmd.add_subparser, list_cmd.run),
+        ("inject", "Send a message into a project's inbox.",
+         inject_cmd.add_subparser, inject_cmd.run),
+        ("migrate-from-hermes", "Migrate legacy ~/.hermes data into ~/.omoikane.",
+         migrate_cmd.add_subparser, migrate_cmd.run),
+        ("self-update", "Upgrade the standalone binary in place.",
+         self_update_cmd.add_subparser, self_update_cmd.run),
     ]
 
 
@@ -56,9 +69,22 @@ def build_parser() -> Tuple[argparse.ArgumentParser, dict]:
     """Return ``(parser, dispatch_table)`` so callers can introspect / test."""
     parser = argparse.ArgumentParser(
         prog="omoikane",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Standalone CLI/TUI orchestrator for autonomous agent teams on "
-            "the hermes-agent SDK."
+            "the hermes-agent SDK.\n\n"
+            "A project is created with `start` (or `init-project`), driven by a\n"
+            "CTO loop running in a per-project daemon, and watched live in the\n"
+            "TUI via `open`. State lives under ~/.omoikane/."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  omoikane start -b \"build a todo CLI\" -c criteria.txt\n"
+            "  omoikane list\n"
+            "  omoikane open <project-id>\n"
+            "  omoikane inject <project-id> '/cto add tests'\n"
+            "  omoikane delete-project <project-id> --force\n\n"
+            "Run 'omoikane <command> --help' for the full flags of any command."
         ),
     )
     from omoikane import __version__
@@ -79,11 +105,11 @@ def build_parser() -> Tuple[argparse.ArgumentParser, dict]:
         action="count", default=0,
         help="Increase log verbosity (-v INFO, -vv DEBUG).",
     )
-    sub = parser.add_subparsers(dest="command", metavar="<command>")
+    sub = parser.add_subparsers(dest="command", metavar="<command>", title="commands")
 
     dispatch: dict = {}
-    for name, register, runner in _commands():
-        sp = sub.add_parser(name)
+    for name, summary, register, runner in _commands():
+        sp = sub.add_parser(name, help=summary, description=summary)
         register(sp)
         dispatch[name] = runner
 
