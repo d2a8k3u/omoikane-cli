@@ -1,0 +1,40 @@
+site_name: omoikane-cli
+site_description: Autonomous agent team CLI/TUI orchestrator built on the hermes-agent SDK.
+site_url: https://d2a8k3u.github.io/omoikane-cli/
+repo_url: https://github.com/d2a8k3u/omoikane-cli
+repo_name: d2a8k3u/omoikane-cli
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Quickstart: quickstart.md
+  - Commands: commands.md
+  - Configuration: configuration.md
+  - Architecture: architecture.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true
