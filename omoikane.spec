@@ -62,6 +62,12 @@ datas += _cd
 binaries += _cb
 hiddenimports += _ch
 
+# transport extra — httpx for the Slack / Telegram adapters (lazy-imported).
+_hd, _hb, _hh = collect_all("httpx")
+datas += _hd
+binaries += _hb
+hiddenimports += _hh
+
 # Our own package + bundled data. pyproject package-data does NOT feed
 # PyInstaller — agents_registry resolves omoikane/data at import time.
 datas += collect_data_files("omoikane")

@@ -37,7 +37,7 @@ jobs:
       - name: Install (non-editable) + PyInstaller
         run: |
           python -m pip install --upgrade pip
-          pip install ".[runtime]" pyinstaller
+          pip install ".[runtime,tui,transport]" pyinstaller
 
       - name: Build onedir binary
         run: pyinstaller --clean --noconfirm omoikane.spec

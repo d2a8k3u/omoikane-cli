@@ -97,6 +97,9 @@ def _self_test() -> int:
     missing from the build: register tools + construct an ``AIAgent``.
     """
     try:
+        import httpx  # noqa: F401
+        from omoikane.tui.app import run_app  # noqa: F401
+
         from omoikane.tools import register_book_tools
 
         registered = register_book_tools()
