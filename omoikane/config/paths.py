@@ -57,6 +57,35 @@ def logs_dir() -> Path:
     return home() / "logs"
 
 
+def bin_dir() -> Path:
+    """Return ``<home>/bin/`` — holds the ``omoikane`` symlink for binary installs."""
+    return home() / "bin"
+
+
+def binary_path() -> Path:
+    """Return ``<home>/bin/omoikane`` — the stable symlink to the current version.
+
+    install.sh and ``self-update`` keep this pointing at the active
+    ``versions/<v>/omoikane``; launchd/systemd/cron units invoke it.
+    """
+    return bin_dir() / "omoikane"
+
+
+def versions_dir() -> Path:
+    """Return ``<home>/versions/`` — onedir payloads, one subdir per version."""
+    return home() / "versions"
+
+
+def version_dir(version: str) -> Path:
+    """Return ``<home>/versions/<version>/`` — a specific binary version payload."""
+    return versions_dir() / version
+
+
+def update_check_file() -> Path:
+    """Return ``<home>/.update-check`` — throttle cache for the startup update nag."""
+    return home() / ".update-check"
+
+
 def ensure_home() -> Path:
     """Create the home directory tree if missing. Returns the home path.
 
