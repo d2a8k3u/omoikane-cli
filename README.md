@@ -20,8 +20,31 @@ textual TUI covers the operator UX.
 
 ## Install
 
+### Binary (recommended)
+
+No Python required — a self-contained binary with the hermes-agent SDK bundled.
+The installer places everything under `~/.omoikane/` and points
+`~/.omoikane/bin/omoikane` at the current version:
+
+```sh
+curl -fsSL https://d2a8k3u.github.io/omoikane-cli/install.sh | sh
+```
+
+Prebuilt for **macOS (Apple Silicon, arm64)** and **Linux (x86_64)**. Add
+`~/.omoikane/bin` to your `PATH` (the installer prints the exact line), then:
+
+```sh
+omoikane --version
+omoikane self-update      # upgrade in place; re-running install.sh also upgrades
+```
+
+Full guide (PATH setup, macOS Gatekeeper, update opt-out) is in the
+[documentation](https://d2a8k3u.github.io/omoikane-cli/install/).
+
+### From source (development)
+
 ```bash
-git clone https://github.com/davidkulh/omoikane-cli.git
+git clone https://github.com/d2a8k3u/omoikane-cli.git
 cd omoikane-cli
 python3.11 -m venv .venv
 .venv/bin/pip install -e ".[runtime,tui,transport,dev]"
@@ -29,7 +52,8 @@ python3.11 -m venv .venv
 ```
 
 The distribution is named `omoikane-cli`; the import package and the
-installed command both stay `omoikane`.
+installed command both stay `omoikane`. A source install is managed by pip —
+`omoikane self-update` defers to `pip install -U` there.
 
 The extras are intentionally narrow so a core-only contributor (someone who
 just wants to hack on the Book layer) does not need to bring the SDK,
