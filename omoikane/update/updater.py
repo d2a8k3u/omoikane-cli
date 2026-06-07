@@ -31,6 +31,7 @@ from omoikane.config import paths
 
 REPO = "d2a8k3u/omoikane-cli"
 _API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
+_API_LIST = f"https://api.github.com/repos/{REPO}/releases"
 _NAG_INTERVAL_SECONDS = 24 * 60 * 60  # once/day
 _HTTP_TIMEOUT = 10.0
 
@@ -99,11 +100,23 @@ def _get_json(url: str, timeout: float = _HTTP_TIMEOUT) -> dict:
 
 
 def fetch_latest(timeout: float = _HTTP_TIMEOUT) -> Optional[dict]:
-    """Return the latest-release JSON, or None on any error (offline-safe)."""
+    """Return the newest release JSON, or None on any error (offline-safe).
+
+    Prefers the latest stable release; falls back to the newest release in the
+    list (which may be a prerelease) because ``/releases/latest`` returns 404
+    when only prereleases exist.
+    """
     try:
         return _get_json(_API_LATEST, timeout=timeout)
+    except Exception:  # noqa: BLE001 - no stable release; try the full list
+        pass
+    try:
+        releases = _get_json(_API_LIST, timeout=timeout)
+        if isinstance(releases, list) and releases:
+            return releases[0]
     except Exception:  # noqa: BLE001 - any failure -> no update info
-        return None
+        pass
+    return None
 
 
 # --------------------------------------------------------------------------

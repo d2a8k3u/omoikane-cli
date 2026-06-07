@@ -60,8 +60,11 @@ if [ -n "${OMOIKANE_INSTALL_TAG:-}" ]; then
   tag="$OMOIKANE_INSTALL_TAG"
 else
   info "Resolving latest release of $REPO ..."
-  tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" \
-    | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name" *: *"([^"]+)".*/\1/')"
+  _extract_tag() { grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name" *: *"([^"]+)".*/\1/'; }
+  # Prefer the latest stable release; fall back to the newest release (which may
+  # be a prerelease) — /releases/latest 404s when only prereleases exist.
+  tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | _extract_tag)"
+  [ -n "$tag" ] || tag="$(fetch "https://api.github.com/repos/$REPO/releases" 2>/dev/null | _extract_tag)"
 fi
 [ -n "$tag" ] || err "could not determine latest release tag"
 version="${tag#v}"
