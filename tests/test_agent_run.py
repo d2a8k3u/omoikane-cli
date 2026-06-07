@@ -119,31 +119,16 @@ def test_steer_buffers_to_inbox_before_agent_exists(temp_hermes_home, fake_sdk):
 def test_cto_session_terminates_on_done(temp_hermes_home, fake_sdk):
     from omoikane.orchestrator import cto_session
 
+    # Deterministic driver: the completion gate (all criteria satisfied AND no
+    # open tasks) ends the session before any agent runs.
     book = ProjectBook.create("brief", ["AC1"])
-    # Fake agent that marks the project done after its first iteration.
-    base_book = book
+    book.satisfy_criterion(0)
+    book.update_status("in_progress")
 
-    class DoneFakeAgent(FakeAIAgent):
-        def run_conversation(self, *, user_message, task_id=None,
-                             conversation_history=None, **kw):
-            result = super().run_conversation(
-                user_message=user_message,
-                task_id=task_id,
-                conversation_history=conversation_history,
-                **kw,
-            )
-            base_book.satisfy_criterion(0)
-            return result
+    config = RunConfig(model="fake/model", api_key="dummy")
+    iterations = cto_session.run_long_session(book.project_id, config=config)
 
-    fake_module = sys.modules["run_agent"]
-    fake_module.AIAgent = DoneFakeAgent
-
-    config = RunConfig(model="fake/model", api_key="dummy", max_iterations=4)
-    iterations = cto_session.run_long_session(
-        book.project_id, config=config, max_iterations=4,
-    )
-    assert iterations == 1
-    # Reload and confirm.
+    assert iterations == 0
     assert book.load()["status"] == "done"
 
 
@@ -255,6 +240,8 @@ def test_cto_session_stop_event_breaks_loop(temp_hermes_home, fake_sdk):
     from omoikane.orchestrator import cto_session
 
     book = ProjectBook.create("brief", ["AC1"])
+    book.update_status("in_progress")
+    book.open_task("work", assignee_role="agent-backend-engineer", phase="implementation")
     stop = cto_session.SessionStop()
 
     fake_module = sys.modules["run_agent"]
@@ -270,4 +257,7 @@ def test_cto_session_stop_event_breaks_loop(temp_hermes_home, fake_sdk):
     iterations = cto_session.run_long_session(
         book.project_id, config=config, stop=stop, max_iterations=10,
     )
-    assert iterations == 1
+    # The agent requests stop on its first run; the loop must exit well before
+    # the cap (was: tied to the old single-CTO iteration count).
+    assert iterations < 10
+    assert book.load()["status"] != "done"
