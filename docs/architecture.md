@@ -2,27 +2,54 @@
 
 ## Components
 
-- **CTO orchestrator (daemon).** A long-lived agent that reads the project
-  *book*, decides the next task (routing tasks first), and delegates to specialist
-  agents. It runs as a detached Unix daemon (double-fork, no re-exec).
-- **Team orchestrator (state machine).** One iteration per tick: bootstrap tasks,
-  pick the next open task, record the delegation, and return the goal/context the
-  CTO should hand to the SDK's `delegate_task`. The plugin owns state; the LLM
-  owns agency.
+- **Orchestration driver (daemon).** A deterministic loop that drives the
+  project to completion. It runs as a detached Unix daemon (double-fork, no
+  re-exec) and, each round, asks the state machine for the next task, runs one
+  focused agent to do it, and records the outcome.
+- **Team state machine.** Decides — deterministically — what happens next:
+  bootstrap the planning round, pick the next open task (routing tasks first),
+  and produce a self-contained delegation plan (role, goal, context, toolsets)
+  for that task.
+- **Focused agents.** Each task is executed by a single-purpose `AIAgent`: a
+  specialist (implementer, backend, QA, tech-writer, …) for executor tasks, or
+  the CTO for routing/kickoff tasks. The agent is briefed with exactly that one
+  task and writes real files in the project workspace.
 - **Supervisor.** A scheduled health check (launchd / systemd / cron) that
   classifies each project (healthy / stalled / crashed / …) and respawns the
   daemon, with a circuit breaker to stop respawn loops.
 - **Operator surface.** CLI commands and a Textual TUI read the book and append to
   the project inbox; gated actions wait for approval.
 - **Persistence.** A per-project `book.json` plus `activity.jsonl`, indexed in a
-  SQLite cross-project index.
+  SQLite cross-project index. The book is the shared memory across agents.
+
+## Orchestration loop
+
+Each round of the driver:
+
+1. **Plan** — the state machine selects the next task and builds its delegation
+   plan. A fresh project first bootstraps an analyst + architect + kickoff round.
+2. **Execute** — the driver runs one focused agent for the plan's role with a
+   single-task directive. Dispatch is the driver's responsibility, so progress
+   does not depend on the model choosing to delegate — even small models produce
+   working code.
+3. **Close** — the driver records the result and completes the task (if the agent
+   did not already), so the state machine advances on the next round.
+4. **Verify** — when everything is built but acceptance criteria are still
+   unverified, a focused QA pass checks each criterion against the produced files,
+   marks the ones that pass as satisfied, and files fix tasks for the rest.
+5. **Finish** — the project is done when every acceptance criterion is satisfied
+   and no tasks remain open. A no-progress breaker ends a project that stalls.
+
+Stop is cooperative: a SIGTERM sets a stop flag that a watcher thread maps onto
+the in-flight agent's `interrupt()`, so the daemon shuts down within a step.
 
 ## hermes-agent integration
 
-omoikane registers its own *book tools* (project_start, book_delegate,
-book_record_result, …) against the hermes-agent SDK's tool registry, then
-constructs an `AIAgent` with the `omoikane` toolset enabled. The SDK is bundled
-into the binary, so no separate install is needed.
+omoikane registers its own *book tools* (project_start, book_record_result,
+book_open_task, book_satisfy_criterion, …) against the hermes-agent SDK's tool
+registry, then constructs each `AIAgent` with the toolsets that role needs (the
+`omoikane` toolset plus file/terminal/etc). The SDK is bundled into the binary,
+so no separate install is needed.
 
 ## Frozen-binary layout
 

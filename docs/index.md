@@ -1,8 +1,8 @@
 # omoikane-cli
 
-A standalone CLI/TUI that runs an **autonomous agent team** — a long-lived CTO
-agent that decomposes a project brief, delegates to specialist agents, and drives
-the work toward your acceptance criteria. Built on the
+A standalone CLI/TUI that runs an **autonomous agent team** — it decomposes a
+project brief, runs specialist agents to do the work, and drives it toward your
+acceptance criteria. Built on the
 [hermes-agent](https://github.com/NousResearch/hermes-agent) SDK.
 
 ## Highlights
@@ -11,8 +11,9 @@ the work toward your acceptance criteria. Built on the
   hermes-agent SDK baked in.
 - **Self-updating** — `omoikane self-update`, plus a quiet "new version available"
   nag.
-- **Long-lived orchestrator** — a CTO agent runs as a background daemon; a
-  supervisor watches it and respawns on stalls/crashes.
+- **Deterministic orchestration** — a background daemon drives the work task by
+  task, so even small models produce real, tested code; a supervisor watches it
+  and respawns on stalls/crashes.
 - **Operator surface** — inspect, inject messages, and approve gated actions from
   the CLI or a live TUI.
 - **Self-contained state** — everything lives under `~/.omoikane/`.
@@ -28,9 +29,9 @@ See [Install](install.md) for details, then [Quickstart](quickstart.md).
 ## How it fits together
 
 ```
-omoikane start ──▶ CTO daemon ──▶ delegates ──▶ specialist agents
-                      ▲                              │
-        supervisor ───┘ (health, respawn)            ▼
+omoikane start ──▶ orchestration daemon ──▶ runs ──▶ specialist agents
+                      ▲                                    │
+        supervisor ───┘ (health, respawn)                  ▼
                                               your acceptance criteria
 ```
 
