@@ -45,6 +45,16 @@ for pkg in ["pydantic", "pydantic_core"]:
     binaries += b
     hiddenimports += h
 
+# TUI extra. textual and rich resolve widgets/submodules via importlib at
+# runtime, so PyInstaller's static graph misses the package code and only the
+# dist-info (from copy_metadata below) lands — `omoikane open` then dies with
+# "No module named 'textual'". collect_all pulls the actual package trees.
+for pkg in ["textual", "rich", "watchfiles"]:
+    d, b, h = collect_all(pkg)
+    datas += d
+    binaries += b
+    hiddenimports += h
+
 # certifi — the updater's stdlib urllib needs its CA bundle (cacert.pem) for
 # HTTPS to GitHub; the OS trust store is not reliably found in a frozen app.
 _cd, _cb, _ch = collect_all("certifi")
