@@ -68,7 +68,7 @@ def test_migrate_copies_and_sanitises(temp_hermes_home, hermes_root):
 
 def test_migrate_reindex_populates_dashboard(temp_hermes_home, hermes_root):
     """After migration, _reindex must populate the SQLite index so the
-    DashboardProvider lists the migrated project (not just the files on disk)."""
+    ProjectIndex lists the migrated project (not just the files on disk)."""
     args = type("A", (), {
         "hermes_root": hermes_root,
         "dry_run": False,
@@ -76,9 +76,9 @@ def test_migrate_reindex_populates_dashboard(temp_hermes_home, hermes_root):
     })()
     assert migrate_cmd.run(args) == 0
 
-    from omoikane.core.dashboard import DashboardProvider
+    from omoikane.core.project_index import ProjectIndex
 
-    ids = [p["id"] for p in DashboardProvider().list_projects()]
+    ids = [p["id"] for p in ProjectIndex().list_projects()]
     assert "proj-test-001" in ids
 
 

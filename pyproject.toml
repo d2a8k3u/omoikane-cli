@@ -46,11 +46,8 @@ omoikane = "omoikane.cli.main:main"
 [project.urls]
 Repository = "https://github.com/davidkulh/omoikane"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
-
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 include = ["omoikane*"]
 
 [tool.setuptools.package-data]
@@ -76,4 +73,4 @@ filterwarnings = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/omoikane"]
+source = ["omoikane"]

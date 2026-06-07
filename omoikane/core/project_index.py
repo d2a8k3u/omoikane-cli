@@ -1,6 +1,9 @@
 """
-Omoikane - Dashboard Provider (M6)
-Provides data for Hermes dashboard / UI
+Omoikane - Project Index.
+
+Aggregated read-only data about Omoikane projects (project list, detail,
+activity tail) for the CLI and TUI. Despite the historical name, this is a
+data reader over the SQLite index + per-project books, not web UI code.
 """
 
 import json
@@ -39,8 +42,8 @@ def _health_indicator(book: Dict[str, Any]) -> Dict[str, Any]:
     return {"color": "grey", "label": "no supervisor data", "reason": None}
 
 
-class DashboardProvider:
-    """Provides aggregated data about Omoikane projects for the dashboard."""
+class ProjectIndex:
+    """Provides aggregated read-only data about Omoikane projects."""
 
     def list_projects(self) -> List[Dict[str, Any]]:
         """Return list of all projects with basic status + health bullet."""

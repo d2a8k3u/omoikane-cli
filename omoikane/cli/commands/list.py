@@ -19,9 +19,9 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    from omoikane.core.dashboard import DashboardProvider
+    from omoikane.core.project_index import ProjectIndex
 
-    rows = DashboardProvider().list_projects()
+    rows = ProjectIndex().list_projects()
     if args.status:
         rows = [r for r in rows if r.get("status") == args.status]
 

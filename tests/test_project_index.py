@@ -1,11 +1,11 @@
 from omoikane.core.book import ProjectBook
-from omoikane.core.dashboard import DashboardProvider
+from omoikane.core.project_index import ProjectIndex
 from omoikane.tools import book_delegate
 
 
 def test_list_projects_cold_start_initializes_schema(monkeypatch, tmp_path):
     """Hermes UI may load the Omoikane tab before any tool has been
-    invoked. DashboardProvider must trigger the lazy schema init on its
+    invoked. ProjectIndex must trigger the lazy schema init on its
     own cold-start path — not assume some other code already ran it.
 
     Without the dashboard._get_conn → _store._get_conn delegation this
@@ -20,20 +20,20 @@ def test_list_projects_cold_start_initializes_schema(monkeypatch, tmp_path):
     # would mask the bug we're guarding against.
     assert not (tmp_path / "index.db").exists()
 
-    rows = DashboardProvider().list_projects()
+    rows = ProjectIndex().list_projects()
     assert rows == []
     # The lazy init must have created the index file as a side effect.
     assert (tmp_path / "index.db").exists()
 
 
 def test_list_projects_empty(temp_hermes_home):
-    assert DashboardProvider().list_projects() == []
+    assert ProjectIndex().list_projects() == []
 
 
 def test_list_projects_returns_created(temp_hermes_home):
     b1 = ProjectBook.create("brief 1", ["AC"])
     b2 = ProjectBook.create("brief 2", ["AC"])
-    rows = DashboardProvider().list_projects()
+    rows = ProjectIndex().list_projects()
     ids = {r["id"] for r in rows}
     assert b1.project_id in ids
     assert b2.project_id in ids
@@ -47,14 +47,14 @@ def test_project_detail_includes_book_and_delegation_tree(temp_hermes_home):
         "to_role": "agent-implementer",
         "expected": "x",
     })
-    detail = DashboardProvider().project_detail(book.project_id)
+    detail = ProjectIndex().project_detail(book.project_id)
     assert detail["id"] == book.project_id
     assert detail["book"]["title"]
     assert any(n["id"] == "n-task-d1" for n in detail["delegation_tree"]["nodes"])
 
 
 def test_project_detail_unknown():
-    assert "error" in DashboardProvider().project_detail("proj-missing")
+    assert "error" in ProjectIndex().project_detail("proj-missing")
 
 
 def test_tail_activity_returns_recent(temp_hermes_home):
@@ -62,6 +62,6 @@ def test_tail_activity_returns_recent(temp_hermes_home):
     for i in range(5):
         book.log("note", f"event {i}")
 
-    entries = DashboardProvider().tail_activity(book.project_id, limit=3)
+    entries = ProjectIndex().tail_activity(book.project_id, limit=3)
     assert len(entries) == 3
     assert entries[-1]["summary"] == "event 4"

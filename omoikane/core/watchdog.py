@@ -40,7 +40,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 from .book import ProjectBook
-from .dashboard import DashboardProvider
+from .project_index import ProjectIndex
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +277,7 @@ def run_watchdog(stall_minutes: int = DEFAULT_STALL_MINUTES) -> WatchdogResult:
     useful one-shot summary.
     """
     result = WatchdogResult(ran_at=_utc_now().isoformat())
-    provider = DashboardProvider()
+    provider = ProjectIndex()
     now = _utc_now()
 
     for entry in provider.list_projects():

@@ -100,12 +100,12 @@ def _cmd_resolve(args: argparse.Namespace, *, decision: str) -> int:
 
 def _iter_pending(project_id_filter: str = None) -> Iterable[Dict[str, str]]:
     from omoikane.core.book import ProjectBook
-    from omoikane.core.dashboard import DashboardProvider
+    from omoikane.core.project_index import ProjectIndex
 
     if project_id_filter:
         ids: List[str] = [project_id_filter]
     else:
-        ids = [r["id"] for r in DashboardProvider().list_projects()]
+        ids = [r["id"] for r in ProjectIndex().list_projects()]
     for pid in ids:
         try:
             data = ProjectBook(pid).load()
