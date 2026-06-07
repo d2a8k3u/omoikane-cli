@@ -73,31 +73,25 @@ def build_cto_system_prompt(
         Operating manual
         ----------------
 
-        You are the long-lived CTO for this Omoikane project. The hermes-agent
-        SDK ``delegation`` toolset gives you ``delegate_task`` — use it to
-        dispatch specialist agents. The ``omoikane`` toolset gives you the
-        Project Book tools (``book_log``, ``book_open_task``, ``book_record_result``,
-        ``book_satisfy_criterion``, ``prepare_manager_handoff``, …). Both
-        toolsets are enabled for you and propagate to children automatically.
+        You are the CTO / planner for this Omoikane project. You do NOT run
+        specialists yourself — the Omoikane orchestrator executes every task you
+        file and closes it. You are dispatched for a single routing/kickoff task
+        at a time; do exactly that task with the ``omoikane`` Project Book tools,
+        then stop.
 
-        Each iteration you receive a status snapshot in the user message. Take
-        ONE concrete step per iteration:
+        Typical actions for the task you were given:
 
-        1. If a specialist is in flight, wait for its delegate_task to return
-           before opening another. Then ``prepare_manager_handoff`` and dispatch
-           the manager to validate.
-        2. If a routing task targets ``agent-cto``, decide assignment with
-           ``book_assign_task``.
-        3. If acceptance criteria are unsatisfied and no open work remains,
-           file the next concrete task with ``book_open_task`` and dispatch.
-        4. If everything is satisfied, summarise and stop — do not call any
-           more tools.
+        1. Kickoff: read the analyst + architect reflections (paths are in your
+           context), then ``book_set_roadmap(...)`` and file the executor tasks
+           with ``book_open_task(title, assignee_role, phase, milestone_id)``.
+           The orchestrator runs each filed task next — you do NOT dispatch them.
+        2. Routing request targeting ``agent-cto``: choose the executor and call
+           ``book_assign_task(task=..., role=...)``.
+        3. Close your task: ``book_record_result(task=..., status='done',
+           reflection=...)`` then ``book_complete_task(task=...)``.
 
-        ``delegate_task`` MUST pass ``role="leaf"`` for specialists and
-        ``toolsets`` enumerating only the toolsets the specialist needs.
-        Specialists must call ``book_request_approval`` BEFORE dangerous
-        commands; if ``pending_approval`` comes back, pause that task and
-        report to the operator via ``book_log`` — do NOT retry.
+        Do NOT call ``delegate_task`` — dispatch is the orchestrator's job.
+        Specialists self-gate dangerous commands via ``book_request_approval``.
 
         The Project Book lives at ``{path_hint}``. Treat it as the single
         source of truth.
@@ -111,6 +105,103 @@ def build_cto_system_prompt(
         f"Enabled toolsets: {', '.join(enabled_toolsets)}",
     ]
     return "\n\n".join(s for s in sections if s)
+
+
+def build_role_system_prompt(
+    project_id: str,
+    book: Mapping[str, Any],
+    *,
+    role: str,
+    enabled_toolsets: List[str],
+) -> str:
+    """``ephemeral_system_prompt`` for a focused, single-task specialist run.
+
+    Unlike :func:`build_cto_system_prompt` (which casts the agent as the
+    long-lived orchestrator), this briefs a *leaf worker*: do exactly the one
+    delegated task, write real files, do not try to delegate further.
+    """
+    registry = get_registry()
+    skill = (registry.get_skill_content(role) or "").strip()
+    path_hint = _project_path_hint(project_id)
+    manual = (
+        "Operating manual\n----------------\n"
+        f"You are the {role} agent in the Omoikane team. You have been delegated "
+        "exactly ONE task; its full assignment is in the user message. Do the "
+        "work for real:\n"
+        "  - Use your file / terminal toolsets to CREATE and EDIT real files in "
+        "the current working directory. Do not merely describe a plan.\n"
+        "  - Record durable outcomes with the Project Book tools (book_log, "
+        "book_reflect, book_add_artifact) when relevant.\n"
+        "  - When the task is genuinely complete, stop with a short summary "
+        "naming the files you changed and the verification you ran.\n"
+        "Do not call delegate_task — you are a leaf worker, not the "
+        f"orchestrator. The Project Book lives at {path_hint}."
+    )
+    criteria = book.get("acceptance_criteria") or []
+    criteria_status = book.get("criteria_status") or {}
+    sections = [
+        skill,
+        manual,
+        f"Project brief:\n{(book.get('brief') or '').strip()}",
+        "Acceptance criteria:\n" + _format_criteria(criteria, criteria_status),
+        f"Enabled toolsets: {', '.join(enabled_toolsets)}",
+    ]
+    return "\n\n".join(s for s in sections if s)
+
+
+def build_task_directive(plan: Mapping[str, Any]) -> str:
+    """``user_message`` driving one focused task execution.
+
+    ``plan`` is the ``next_delegation`` payload from
+    :meth:`TeamOrchestrator.run_once` — its ``context`` is already a complete,
+    self-contained assignment (brief, criteria, role SKILL.md, routing/kickoff
+    procedure). We append an imperative footer so a weak model implements
+    rather than narrates.
+    """
+    context = (plan.get("context") or "").strip()
+    action = (
+        "\n\n=== ACTION ===\n"
+        "Complete this task NOW in the current working directory. Implement it "
+        "for real — create/edit the actual files; do not only describe a plan. "
+        "When finished, stop and summarize the files you changed and the "
+        "verification you ran."
+    )
+    return f"{context}{action}"
+
+
+def build_qa_directive(project_id: str, book: Mapping[str, Any]) -> str:
+    """``user_message`` for a deterministic QA/verification pass.
+
+    Lists the still-unsatisfied acceptance criteria and tells the reviewer to
+    verify each against the produced files, satisfying the ones that pass and
+    filing fix tasks for the ones that don't.
+    """
+    criteria = book.get("acceptance_criteria") or []
+    status = book.get("criteria_status") or {}
+    pending = [
+        f"  ({i}) {c}"
+        for i, c in enumerate(criteria)
+        if status.get(str(i)) != "satisfied"
+    ]
+    pending_block = "\n".join(pending) or "  (none)"
+    path_hint = _project_path_hint(project_id)
+    return (
+        f"You are the QA reviewer for project {project_id}. The team has been "
+        "building in the current working directory. Verify the project against "
+        "each UNSATISFIED acceptance criterion below by inspecting and, where "
+        "possible, running the actual files (use your file / terminal tools).\n\n"
+        f"Project brief:\n{(book.get('brief') or '').strip()}\n\n"
+        f"Unsatisfied acceptance criteria:\n{pending_block}\n\n"
+        "For EACH criterion:\n"
+        "  - If it genuinely passes, call book_satisfy_criterion(project_id, "
+        "index=<the number above>, evidence=<what you checked / command output>).\n"
+        "  - If it fails or is missing, call book_open_task(project_id, "
+        "title=<concrete fix>, assignee_role=<role>, phase='implementation') so "
+        "the team can address it.\n"
+        "Do NOT satisfy a criterion you could not actually verify. "
+        f"The Project Book lives at {path_hint}. When done, stop with a short "
+        "summary of what passed and what you filed."
+    )
 
 
 def build_initial_directive(project_id: str, book: Mapping[str, Any]) -> str:

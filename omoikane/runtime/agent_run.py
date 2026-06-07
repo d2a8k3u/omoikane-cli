@@ -83,8 +83,16 @@ class AgentRun:
         else:
             self.toolsets = role_toolsets.toolsets_for(role, overrides=self.config.role_overrides)
 
-        builder = system_prompt_builder or _prompts.build_cto_system_prompt
-        base_prompt = builder(project_id, book, enabled_toolsets=self.toolsets)
+        if system_prompt_builder is not None:
+            base_prompt = system_prompt_builder(project_id, book, enabled_toolsets=self.toolsets)
+        elif role == "agent-cto":
+            base_prompt = _prompts.build_cto_system_prompt(
+                project_id, book, enabled_toolsets=self.toolsets)
+        else:
+            # Leaf specialists get a focused single-task brief, not the CTO's
+            # long-lived-orchestrator manual.
+            base_prompt = _prompts.build_role_system_prompt(
+                project_id, book, role=role, enabled_toolsets=self.toolsets)
         # Every role with terminal-class access gets the specialist
         # self-gating addendum so a dangerous command stops at
         # book_request_approval instead of running unconditionally.
@@ -181,6 +189,21 @@ class AgentRun:
             drained_inject_count=len(injects),
             error=None,
         )
+
+    def cancel(self) -> None:
+        """Interrupt the in-flight ``run_conversation`` (call from another thread).
+
+        Uses the SDK's ``AIAgent.interrupt()`` which signals the agent loop and
+        any long-running tools to abort early, so a SIGTERM-driven stop is
+        honored within a step instead of waiting for the whole iteration.
+        """
+        agent = self._agent
+        if agent is None:
+            return
+        try:
+            agent.interrupt()
+        except Exception:
+            logger.exception("agent.interrupt failed")
 
     def steer(self, text: str) -> bool:
         """Forward an inject to the underlying agent's ``steer`` channel.
