@@ -1,7 +1,7 @@
 """Top-level ``omoikane`` entry point.
 
 The operator surface spans project lifecycle (``start``, ``resume``,
-``stop``, ``open``), inspection (``status``, ``list``), the operator
+``stop``, ``open``, ``delete-project``), inspection (``status``, ``list``), the operator
 inbox (``inject``, ``approvals``), the background ``supervisor``, and
 ``migrate`` for on-disk upgrades.
 
@@ -22,6 +22,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
     ``(name, add_subparser_fn, run_fn)``.
     """
     from .commands import approvals as approvals_cmd
+    from .commands import delete as delete_cmd
     from .commands import init as init_cmd
     from .commands import inject as inject_cmd
     from .commands import list as list_cmd
@@ -42,6 +43,7 @@ def _commands() -> List[Tuple[str, Callable, Callable]]:
         ("supervisor", supervisor_cmd.add_subparser, supervisor_cmd.run),
         ("approvals", approvals_cmd.add_subparser, approvals_cmd.run),
         ("init-project", init_cmd.add_subparser, init_cmd.run),
+        ("delete-project", delete_cmd.add_subparser, delete_cmd.run),
         ("status", status_cmd.add_subparser, status_cmd.run),
         ("list", list_cmd.add_subparser, list_cmd.run),
         ("inject", inject_cmd.add_subparser, inject_cmd.run),

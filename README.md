@@ -96,6 +96,7 @@ omoikane start             create + run a project (--foreground / --detach / --n
 omoikane resume <pid>      continue a project's CTO loop with its persisted history
 omoikane open <pid>        attach the textual TUI (--start-if-stopped for daemon)
 omoikane stop <pid>        send SIGTERM to the daemon (--force escalates to SIGKILL)
+omoikane delete-project <pid>   permanently remove a project, dir + index (--force stops a live daemon + skips the prompt)
 
 omoikane supervisor install     write launchd / systemd timer / cron entry
 omoikane supervisor tick        run the no-LLM watchdog pass (used by the scheduler)

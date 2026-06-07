@@ -8,7 +8,11 @@ import time
 
 import pytest
 
-from omoikane.core.store import ProjectStore, generate_project_id
+from omoikane.core.store import (
+    ProjectStore,
+    delete_project,
+    project_exists,
+)
 
 
 def test_atomic_json_write_durable(tmp_path):
@@ -152,3 +156,90 @@ def test_compare_and_set_resurrect_idempotent(temp_hermes_home):
     assert store.compare_and_set_resurrect_run_id("run-2") is False
     book = store.load_book()
     assert book["active_resurrect_run_id"] == "run-1"
+
+
+# --- project deletion ---
+
+
+def test_delete_project_removes_dir_and_index(temp_hermes_home):
+    """delete_project must drop the on-disk dir and the projects index row."""
+    pid = "proj-del-001"
+    store = ProjectStore(pid)
+    store.create_book("b", ["a"])
+    assert project_exists(pid) is True
+    assert store.project_dir.exists()
+
+    assert delete_project(pid) is True
+
+    assert not store.project_dir.exists()
+    assert project_exists(pid) is False
+
+    from omoikane.core.project_index import ProjectIndex
+    ids = {row["id"] for row in ProjectIndex().list_projects()}
+    assert pid not in ids
+
+
+def test_delete_project_idempotent_on_missing(temp_hermes_home):
+    """Deleting a project that does not exist returns False and never raises."""
+    assert delete_project("proj-never-existed") is False
+
+
+def test_delete_project_removes_orphan_index_row(temp_hermes_home):
+    """An index row whose dir was already gone is still deletable."""
+    pid = "proj-del-orphan"
+    store = ProjectStore(pid)
+    store.create_book("b", ["a"])
+    shutil.rmtree(store.project_dir)  # leave the index row behind
+    assert project_exists(pid) is True  # row alone counts as existing
+
+    assert delete_project(pid) is True
+    assert project_exists(pid) is False
+
+
+def test_delete_project_refuses_path_traversal(temp_hermes_home, tmp_path):
+    """A traversal id must raise and never touch anything outside the root."""
+    import os
+
+    from omoikane.config import paths
+
+    outside = tmp_path / "victim"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("important")
+
+    traversal_id = os.path.relpath(outside, paths.project_root())
+    assert ".." in traversal_id  # genuinely escapes the project root
+
+    with pytest.raises(ValueError, match="outside the project root"):
+        delete_project(traversal_id)
+
+    assert outside.exists()
+    assert (outside / "keep.txt").read_text() == "important"
+
+
+def test_delete_project_removes_delegation_rows(temp_hermes_home):
+    """delete_project must also clear the project's delegation index rows."""
+    pid = "proj-del-deleg"
+    store = ProjectStore(pid)
+    store.create_book("b", ["a"])
+    store.add_delegation("task-x", "cto", "do the thing")
+
+    from omoikane.core import store as _store
+    conn = _store._get_conn()
+    try:
+        before = conn.execute(
+            "SELECT COUNT(*) FROM delegations WHERE project_id = ?", (pid,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert before >= 1
+
+    delete_project(pid)
+
+    conn = _store._get_conn()
+    try:
+        after = conn.execute(
+            "SELECT COUNT(*) FROM delegations WHERE project_id = ?", (pid,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert after == 0

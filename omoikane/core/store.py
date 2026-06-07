@@ -7,6 +7,7 @@ import fcntl
 import json
 import os
 import random
+import shutil
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,6 +140,49 @@ def generate_project_id() -> str:
     ts = now.strftime("%Y%m%d-%H%M%S")
     suffix = f"{random.randint(0, 0xffff):04x}"
     return f"proj-{ts}-{suffix}"
+
+
+def project_exists(project_id: str) -> bool:
+    """True if the project has an on-disk dir OR an index row.
+
+    Both are checked so an orphaned index row (book.json gone, row left) or
+    an un-indexed dir still counts as existing — and is therefore deletable.
+    """
+    if paths.project_dir(project_id).exists():
+        return True
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ? LIMIT 1", (project_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def delete_project(project_id: str) -> bool:
+    """Permanently remove a project's index rows and on-disk directory."""
+    pdir = paths.project_dir(project_id)
+    root = paths.project_root().resolve()
+    resolved = pdir.resolve()
+    if resolved == root or root not in resolved.parents:
+        raise ValueError(f"refusing to delete outside the project root: {project_id!r}")
+
+    removed = pdir.exists()
+
+    conn = _get_conn()
+    try:
+        cur = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        if cur.rowcount:
+            removed = True
+        conn.execute("DELETE FROM delegations WHERE project_id = ?", (project_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    if pdir.exists():
+        shutil.rmtree(pdir)
+    return removed
 
 
 class ProjectStore:

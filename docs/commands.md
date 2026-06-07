@@ -13,6 +13,7 @@ Run `omoikane <command> --help` for full per-command flags. Global flags:
 | `resume <project-id>` | Continue an existing project's CTO loop from persisted history. |
 | `stop <project-id>` | Send SIGTERM to the daemon (`--force` escalates to SIGKILL). |
 | `open <project-id>` | Attach the live TUI (`--start-if-stopped`). |
+| `delete-project <project-id>` | Permanently remove a project (dir + index rows). Refuses while a daemon is live; `-f`/`--force` skips the prompt **and** stops a running daemon (SIGTERM) first. Irreversible. |
 
 ## Inspection
 
