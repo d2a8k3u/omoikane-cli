@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omoikane-cli"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Autonomous agent team CLI/TUI orchestrator built on hermes-agent SDK."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,8 +19,10 @@ dependencies = [
 
 [project.optional-dependencies]
 runtime = [
-    # Phase 2+: hermes-agent SDK driver
-    "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git",
+    # hermes-agent SDK driver. Pinned to a commit for reproducible binary
+    # builds — `main` drifts and can break the PyInstaller freeze between
+    # releases. Bump deliberately, then re-run the freeze spike.
+    "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git@d165933c560caeb0d6dbf12cd71b1f987e198e1b",
 ]
 tui = [
     # Phase 5: textual TUI + filesystem watcher
@@ -44,7 +46,11 @@ all = [
 omoikane = "omoikane.cli.main:main"
 
 [project.urls]
-Repository = "https://github.com/davidkulh/omoikane"
+Repository = "https://github.com/d2a8k3u/omoikane-cli"
+Documentation = "https://d2a8k3u.github.io/omoikane-cli/"
+
+[tool.setuptools.dynamic]
+version = { attr = "omoikane._version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
