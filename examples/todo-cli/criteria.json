@@ -1,0 +1,12 @@
+[
+  "The add command creates a new task with a unique ID and saves it to the JSON file",
+  "The list command shows all tasks clearly; completed ones are visually distinct",
+  "The done <id> command changes an existing task's status to done",
+  "The delete <id> command removes a task from the list",
+  "Data persists between runs (stored in a JSON file)",
+  "Given a non-existent ID, the program prints a clear error and does not crash",
+  "With no arguments or an unknown command, help is shown",
+  "If the data file does not exist, the app creates it automatically on first run",
+  "The code is split into logical parts (file handling / logic / CLI interface)",
+  "The project includes a README describing installation and usage"
+]
