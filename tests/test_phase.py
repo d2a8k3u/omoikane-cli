@@ -96,8 +96,8 @@ def test_phase_becomes_meta_when_only_routing_tasks_remain(temp_hermes_home):
 def test_satisfying_all_criteria_drives_status_done(temp_hermes_home):
     book = ProjectBook.create("brief", ["A"])
     orch = TeamOrchestrator(book.project_id)
-    orch.run_once()  # bootstrap
-
+    # Completion requires all criteria satisfied AND no open tasks.
+    book.update_status("in_progress")
     book.satisfy_criterion(0, evidence="manual")
     result = orch.run_once()
     assert result["status"] == "completed"

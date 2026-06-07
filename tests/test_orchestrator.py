@@ -78,24 +78,33 @@ def test_no_open_tasks_auto_files_routing_task_for_cto(temp_hermes_home):
     assert "Decompose remaining work" in nd["title"]
 
 
-def test_project_done_only_when_all_criteria_satisfied(temp_hermes_home):
+def test_project_done_only_when_all_criteria_satisfied_and_no_open_tasks(temp_hermes_home):
     book = ProjectBook.create("Brief", ["A", "B"])
     orch = TeamOrchestrator(book.project_id)
     orch.run_once()  # bootstrap
 
-    # Drain all open tasks without satisfying criteria
-    while book.load().get("open_tasks"):
-        data = book.load()
-        data["open_tasks"] = []
-        book.store.save_book(data)
+    # Drain all open tasks without satisfying criteria → not done.
+    def _drain():
+        while book.load().get("open_tasks"):
+            data = book.load()
+            data["open_tasks"] = []
+            book.store.save_book(data)
 
+    _drain()
     result = orch.run_once()
     assert result["status"] in {"needs_decomposition", "in_progress"}
     assert book.load()["status"] != "done"
 
-    # Satisfy criteria explicitly and re-run
+    # Satisfy criteria, but a task is still queued (auto-decomposition filed
+    # one) → criteria alone must NOT finish the project.
     book.satisfy_criterion(0)
     book.satisfy_criterion(1)
+    assert book.load().get("open_tasks")  # work is still queued
+    orch.run_once()
+    assert book.load()["status"] != "done"
+
+    # Drain the remaining task → now both conditions hold → done.
+    _drain()
     result = orch.run_once()
     assert result["status"] == "completed"
     assert book.load()["status"] == "done"

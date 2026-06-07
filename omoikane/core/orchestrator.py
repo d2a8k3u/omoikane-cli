@@ -126,11 +126,18 @@ class TeamOrchestrator:
                 ),
             }
 
-        if self.book.all_criteria_satisfied():
+        data = self.book.load()  # refresh after potential mutation above
+        open_tasks: List[str] = list(data.get("open_tasks", []))
+
+        # A project is complete only when EVERY acceptance criterion is
+        # satisfied AND no tasks remain open. Criteria satisfaction alone does
+        # not finish it — queued work (README, QA, …) must still be executed.
+        if self.book.all_criteria_satisfied() and not open_tasks:
             self.book.update_status("done", phase="completed")
             self.book.log(
                 "decision",
-                "All acceptance criteria satisfied. Project complete.",
+                "All acceptance criteria satisfied and all tasks complete. "
+                "Project complete.",
             )
             # Tear down the per-project supervisor cron immediately so the
             # next scheduler tick doesn't waste a slot. Soft-fail: the
@@ -145,9 +152,6 @@ class TeamOrchestrator:
                 "project_id": self.project_id,
                 "current_phase": "completed",
             }
-
-        data = self.book.load()  # refresh after potential mutation above
-        open_tasks: List[str] = list(data.get("open_tasks", []))
 
         if not open_tasks:
             # Criteria pending + no work queued. Don't deadlock — auto-file a
