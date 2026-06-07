@@ -1,9 +1,9 @@
 """Operator inject channel — `inbox.jsonl` reader + dedup.
 
-The TUI (Phase 5) and the ``omoikane inject`` CLI append one JSON record
+The TUI and the ``omoikane inject`` CLI append one JSON record
 per operator message to ``<project>/inbox.jsonl``. The orchestrator
-process drains the inbox at well-defined points (Phase 3 calls it
-once per CTO iteration) and feeds the unconsumed records to
+process drains the inbox at well-defined points (once per CTO
+iteration) and feeds the unconsumed records to
 ``AIAgent.steer`` so the model sees them on its next API call.
 
 Each record looks like:

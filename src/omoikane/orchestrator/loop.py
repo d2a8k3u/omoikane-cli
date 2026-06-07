@@ -1,13 +1,11 @@
 """Foreground orchestrator entry-point.
 
-This is the Phase-3 baseline: a synchronous, terminal-attached driver
-that creates / resumes a project, then runs :func:`cto_session.run_long_session`
-until the project finishes or the operator hits ``Ctrl+C``.
+A synchronous, terminal-attached driver that creates / resumes a
+project, then runs :func:`cto_session.run_long_session` until the
+project finishes or the operator hits ``Ctrl+C``.
 
-Phase 4 layers the double-fork daemon (``omoikane.orchestrator.daemon``)
-on top of the same entry, but the foreground mode stays useful for
-debugging and for CI checks that want to drive a project without any
-background processes.
+Foreground mode is useful for debugging and for CI checks that want to
+drive a project without any background processes.
 """
 from __future__ import annotations
 

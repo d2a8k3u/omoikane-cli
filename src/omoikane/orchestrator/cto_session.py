@@ -6,9 +6,9 @@ iterations and across daemon restarts, and exits on terminal status or
 all-criteria-satisfied.
 
 The actual delegation to specialists is handled by the SDK's built-in
-``delegate_task`` — Phase 0 spike C confirmed the toolset inheritance
-works as long as the CTO's ``enabled_toolsets`` is the union of every
-specialist toolset (handled by :func:`runtime.role_toolsets.cto_toolsets`).
+``delegate_task`` — toolset inheritance works as long as the CTO's
+``enabled_toolsets`` is the union of every specialist toolset (handled
+by :func:`runtime.role_toolsets.cto_toolsets`).
 """
 from __future__ import annotations
 

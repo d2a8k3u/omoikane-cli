@@ -25,7 +25,7 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--foreground", action="store_true", default=True,
-        help="Run attached to this shell (the only mode supported in Phase 3).",
+        help="Run attached to this shell (the only mode currently supported).",
     )
 
 

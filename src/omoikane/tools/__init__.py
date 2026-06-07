@@ -3,8 +3,7 @@
 The standalone Omoikane CLI registers every Book tool against the SDK's
 module-level :class:`tools.registry.ToolRegistry` before any
 ``AIAgent(...)`` is constructed — the SDK snapshots its available tools
-at agent-init time (verified in Phase 0 spike A), so registration must
-happen up front.
+at agent-init time, so registration must happen up front.
 
 Call :func:`register_book_tools` once during process startup. The CLI
 entry point in :mod:`omoikane.cli.main` does this automatically. Library

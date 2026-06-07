@@ -1,7 +1,7 @@
 """``omoikane approvals list|approve|deny`` — operator-facing approval flow.
 
 Approvals live inside ``book.json`` under ``pending_approvals`` and
-``approved_commands``. The Phase-6 CLI fronts the same surface the TUI
+``approved_commands``. This CLI fronts the same surface the TUI
 ApprovalsPane consumes, so an operator can resolve pending requests
 without launching the TUI.
 """

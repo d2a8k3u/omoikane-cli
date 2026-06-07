@@ -1,7 +1,7 @@
 """Append SDK callback events to a per-project ``activity.jsonl`` stream.
 
-The TUI (Phase 5) tails this file with ``watchfiles`` to render the live
-agent transcript. The orchestrator (Phase 3) wires the SDK's
+The TUI tails this file with ``watchfiles`` to render the live
+agent transcript. The orchestrator wires the SDK's
 ``stream_delta_callback`` / ``tool_start_callback`` / ``tool_complete_callback``
 into :meth:`ActivityEmitter.emit` so every model token and tool call
 lands in the same place — regardless of whether it came from the parent
@@ -15,7 +15,7 @@ would blow up its size by orders of magnitude.
 
 Secret redaction is applied to every payload before it touches disk so
 the file is safe to share / replay (matches the contract of
-``ProjectBook.store.append_activity`` from Phase 1).
+``ProjectBook.store.append_activity``).
 """
 from __future__ import annotations
 

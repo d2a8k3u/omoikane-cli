@@ -1,6 +1,6 @@
 """Pluggable transport interface for approval pushes + completion notices.
 
-The supervisor's tick (Phase 4) and the TUI (Phase 5) both call into a
+The supervisor's tick and the TUI both call into a
 transport to surface pending approvals and project lifecycle events to
 the operator. Transports are stateless wrappers around the operator's
 chosen channel: stdout for headless boxes, the TUI's pending_approvals

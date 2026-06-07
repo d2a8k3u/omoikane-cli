@@ -9,8 +9,8 @@ Resolution order for the project home directory:
 1. ``OMOIKANE_HOME`` env var (absolute path) — used by the pytest fixture
 2. ``~/.omoikane/`` — production default
 
-The legacy Hermes plugin used ``~/.hermes/omoikane/``. Migration is a
-Phase 8 concern; this module never reads from the legacy location.
+The legacy Hermes plugin used ``~/.hermes/omoikane/``. This module never
+reads from the legacy location.
 """
 from __future__ import annotations
 

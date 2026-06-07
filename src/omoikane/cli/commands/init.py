@@ -5,9 +5,9 @@ Reads a free-text brief from one file and acceptance criteria from another
 same :func:`omoikane.tools.handlers.project_start` handler the SDK invokes,
 so the on-disk shape matches an agent-driven start byte-for-byte.
 
-Phase 3 will replace this with a richer ``omoikane start`` that also spawns
-the orchestrator daemon and opens the TUI. ``init-project`` is preserved
-for headless workflows (e.g. CI seeding test projects).
+For an end-to-end flow that also runs the orchestrator, see
+``omoikane start``. ``init-project`` is preserved for headless workflows
+(e.g. CI seeding test projects).
 """
 from __future__ import annotations
 

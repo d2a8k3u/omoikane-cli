@@ -1,7 +1,8 @@
 """Slack transport via Incoming Webhook (outbound) + Events API (inbound).
 
-Phase 7 ships the outbound half — Slack incoming webhooks are trivial
-and require no auth handshake beyond holding the URL. Inbound responses
+Only the outbound half is implemented — Slack incoming webhooks are
+trivial and require no auth handshake beyond holding the URL. Inbound
+responses
 require either the Events API (HTTPS reachable from Slack) or a
 periodic ``conversations.history`` poll; the public surface mirrors
 :class:`omoikane.transport.telegram.TelegramTransport` so swapping is
@@ -54,8 +55,8 @@ class SlackTransport:
 
     def poll_responses(self) -> List[TransportResponse]:
         # Inbound responses require either the Events API webhook or
-        # conversations.history polling with a bot token. Phase 7 keeps
-        # Slack write-only; operators reply through the CLI or TUI.
+        # conversations.history polling with a bot token. This transport
+        # is write-only; operators reply through the CLI or TUI.
         return []
 
     # ------------------------------------------------------------------

@@ -1,9 +1,7 @@
 """``omoikane start`` — bootstrap a project and (optionally) run the CTO.
 
-Phase 3 ships a foreground-only variant: the project is created in the
-current process and the CTO ``AIAgent`` is driven attached to the shell.
-The Phase 4 build will add daemon mode (``--detach``) on top of this same
-entry point.
+Foreground-only: the project is created in the current process and the
+CTO ``AIAgent`` is driven attached to the shell.
 """
 from __future__ import annotations
 

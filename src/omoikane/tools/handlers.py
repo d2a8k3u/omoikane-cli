@@ -8,15 +8,15 @@ contract: ``handler(args: dict, **kwargs) -> str``, where ``args`` is
 the validated JSON-Schema payload and the return value is a JSON string
 the model parses.
 
-Differences from the original Hermes plugin (see
-``docs/phase2-tools-audit.md`` for the full mapping):
+Differences from the original Hermes plugin:
 
 - Origin capture is delegated to :mod:`omoikane.tools.audit` and no
   longer reads Hermes session ContextVars.
 - Session ↔ project binding goes through :mod:`omoikane.tools.session`
   (a process-local dict) instead of ``omoikane.hooks``.
-- Project supervisor cron is owned by Phase 4 (``omoikane.supervisor``);
-  ``project_start`` returns ``supervisor_cron_id=None`` until that lands.
+- Project supervisor scheduling is owned by :mod:`omoikane.supervisor`
+  (one global tick iterates all projects); ``project_start`` returns
+  ``supervisor_cron_id=None``.
 """
 from __future__ import annotations
 
@@ -35,19 +35,19 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_project_cron_safe(project_id: str) -> Tuple[Optional[str], Optional[str]]:
-    """Phase-2 placeholder for the Phase-4 supervisor wiring.
+    """No-op: per-project cron is not used.
 
     Returns ``(None, None)`` — no cron is registered, no error is
-    reported. ``omoikane.supervisor.install`` will own the global
-    supervisor schedule once Phase 4 lands; per-project cron records are
-    intentionally removed from the design (one global tick iterates all
-    projects from the SQLite index).
+    reported. :func:`omoikane.supervisor.install` owns the global
+    supervisor schedule; per-project cron records are intentionally
+    removed from the design (one global tick iterates all projects from
+    the SQLite index).
     """
     return None, None
 
 
 def _remove_project_cron_safe(project_id: str) -> Tuple[bool, Optional[str]]:
-    """Phase-2 placeholder. See :func:`_ensure_project_cron_safe`."""
+    """No-op. See :func:`_ensure_project_cron_safe`."""
     return True, None
 
 
@@ -97,9 +97,9 @@ def project_start(args: dict, **kwargs) -> str:
         # Kick the first orchestration iteration (bootstrap initial tasks).
         first_tick = TeamOrchestrator(book.project_id).run_once()
 
-        # Intentional Phase-2 no-op: _ensure_project_cron_safe returns
+        # Intentional no-op: _ensure_project_cron_safe returns
         # (None, None). Per-project cron records were removed from the design;
-        # the Phase-4 global supervisor (omoikane.supervisor) owns scheduling
+        # the global supervisor (omoikane.supervisor) owns scheduling
         # and iterates all projects from the SQLite index on each tick. The
         # returned keys are kept for return-shape compatibility.
         cron_id, cron_err = _ensure_project_cron_safe(book.project_id)

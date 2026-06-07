@@ -1,4 +1,4 @@
-"""Phase-2 smoke: every Book tool reaches the SDK registry."""
+"""Smoke: every Book tool reaches the SDK registry."""
 from __future__ import annotations
 
 import pytest
@@ -100,8 +100,8 @@ def test_project_start_round_trip_through_registry(temp_hermes_home):
     registry: it must capture origin into book.json and return the cron no-op
     return shape (supervisor_cron_id / supervisor_cron_error both None).
 
-    This pins both the return-shape contract AND the intentional Phase-2 cron
-    deferral that no other test exercises through the registry.
+    This pins both the return-shape contract AND the intentional cron
+    no-op that no other test exercises through the registry.
     """
     sdk_registry = _import_sdk_registry()
 

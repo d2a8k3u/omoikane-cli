@@ -16,7 +16,7 @@ def test_fallback_for_unknown_role_is_narrow():
 
 
 def test_specialists_use_terminal_not_code_execution():
-    # Phase 0 spike C — children cannot have code_execution.
+    # Delegated children cannot have code_execution.
     for role in (
         "agent-backend-engineer",
         "agent-frontend-engineer",
@@ -67,5 +67,5 @@ def test_merge_overrides_from_config_filters_garbage():
 
 def test_known_roles_includes_seventeen_entries():
     # The CTO entry plus 14 specialists plus orchestrator-protocol and
-    # agent-manager — same 17 SKILL.md briefs we bundled in Phase 1.
+    # agent-manager — 17 bundled SKILL.md briefs.
     assert len(role_toolsets.known_roles()) == 17

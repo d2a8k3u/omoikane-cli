@@ -1,8 +1,8 @@
 """Role → hermes-agent SDK toolset mapping.
 
 The standalone Omoikane CLI dispatches specialists by calling the SDK's
-built-in ``delegate_task`` from the CTO. Spike C in Phase 0 verified two
-constraints we encode here:
+built-in ``delegate_task`` from the CTO. Two SDK constraints are encoded
+here:
 
 1. The SDK's ``DELEGATE_BLOCKED_TOOLS`` strips ``code_execution`` from
    any child agent — so specialists that previously requested it must
@@ -31,9 +31,9 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 OMOIKANE_TOOLSET = "omoikane"
 
 # Per-role default toolset assignments. Derived from
-# ``plugins/omoikane/orchestrator.py:67-83`` with the Phase-0 substitution
-# of ``code_execution`` → ``terminal`` for specialist roles (the SDK's
-# delegate_task blocks code_execution for children regardless of intent).
+# ``plugins/omoikane/orchestrator.py:67-83`` with ``code_execution`` →
+# ``terminal`` substituted for specialist roles (the SDK's delegate_task
+# blocks code_execution for children regardless of intent).
 _BASE_TOOLSETS: Dict[str, List[str]] = {
     "agent-product-analyst":     ["file", "web"],
     "agent-architekt":           ["file", "web"],

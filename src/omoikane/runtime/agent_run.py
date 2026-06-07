@@ -85,9 +85,9 @@ class AgentRun:
 
         builder = system_prompt_builder or _prompts.build_cto_system_prompt
         base_prompt = builder(project_id, book, enabled_toolsets=self.toolsets)
-        # Phase 6: every role with terminal-class access gets the
-        # specialist self-gating addendum so a dangerous command stops
-        # at book_request_approval instead of running unconditionally.
+        # Every role with terminal-class access gets the specialist
+        # self-gating addendum so a dangerous command stops at
+        # book_request_approval instead of running unconditionally.
         addendum = _prompts.approval_addendum(role, self.toolsets)
         self.system_prompt = (
             f"{base_prompt}\n\n{addendum}".strip() if addendum else base_prompt
@@ -210,7 +210,7 @@ class AgentRun:
             logger.exception("stream_delta_callback failed")
 
     def _on_tool_start(self, *args: Any, **kwargs: Any) -> None:
-        # SDK call signature: (event, name, preview, args) per Phase-0 spike D.
+        # SDK call signature: (event, name, preview, args).
         name, args_payload = _extract_tool_args(args, kwargs)
         try:
             self.emitter.tool_start(self.role, name, args_payload)
@@ -259,10 +259,8 @@ class AgentRun:
 
 
 # ----------------------------------------------------------------------
-# Tiny extraction helpers — the SDK's callback positional arguments are
-# documented in Phase-0 spike D (tools/delegate_tool.py:1169 region).
-# We tolerate both positional + kwarg forms because future SDK versions
-# may reshuffle.
+# Tiny extraction helpers — we tolerate both positional + kwarg forms of
+# the SDK's callback arguments because future SDK versions may reshuffle.
 # ----------------------------------------------------------------------
 
 def _extract_tool_args(args: tuple, kwargs: dict):

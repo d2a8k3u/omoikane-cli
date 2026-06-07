@@ -1,12 +1,9 @@
 """Top-level ``omoikane`` entry point.
 
-The full operator surface (``start``, ``open``, ``status``, ``supervisor`` …)
-lands in Phase 3-5. This Phase 2 build ships just the subcommands needed to
-exercise the SDK plumbing end-to-end:
-
-- ``omoikane init-project`` — create a Project Book from brief + criteria.
-- ``omoikane status`` — print a project's current Book.
-- ``omoikane list`` — list known projects from the SQLite index.
+The operator surface spans project lifecycle (``start``, ``resume``,
+``stop``, ``open``), inspection (``status``, ``list``), the operator
+inbox (``inject``, ``approvals``), the background ``supervisor``, and
+``migrate`` for on-disk upgrades.
 
 Each subcommand lives in :mod:`omoikane.cli.commands.<name>` and registers
 itself by exposing ``add_subparser(subparsers)`` plus ``run(args) -> int``.

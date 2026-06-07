@@ -574,8 +574,7 @@ class ProjectBook:
         In the standalone Omoikane CLI there is no host-level command
         allowlist — approval gating is mediated by per-project state and the
         operator transport. Always returns ``False`` so callers fall back to
-        their local approval bookkeeping. Future work (Phase 6/7): route
-        extensions through the configured transport layer.
+        their local approval bookkeeping.
         """
         return False
 

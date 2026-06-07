@@ -13,12 +13,10 @@ killing the loop.
 
 ## Status
 
-**Beta.** All eight planned phases (0 SDK spike, 1 core extraction, 2 tools
-layer, 3 runtime, 4 daemon + supervisor, 5 TUI, 6 approvals, 7 transports,
-8 migration + polish) land in this tree. A web dashboard was scoped but
-deliberately dropped — the textual TUI covers the operator UX. See
-`docs/phase0-spike-report.md` for the SDK feasibility analysis the design
-rests on.
+**Beta.** The full stack lands in this tree: core Book, tools layer,
+runtime, daemon + supervisor, TUI, approvals, transports, and on-disk
+migration. A web dashboard was scoped but deliberately dropped — the
+textual TUI covers the operator UX.
 
 ## Install
 
@@ -117,14 +115,14 @@ omoikane migrate-from-hermes     copy ~/.hermes/omoikane/* → ~/.omoikane/*
 - **Mode A — long-lived CTO.** One `AIAgent` per project gets the union of
   every specialist toolset (`file`, `web`, `browser`, `terminal`,
   `delegation`, `omoikane`). The CTO calls `delegate_task` to spawn child
-  agents; Phase 0 spike C confirmed the SDK intersects the child's requested
-  toolsets with the parent's, so child specialists inherit the toolsets they
-  need without losing them. `code_execution` is blocked for children by the
+  agents; the SDK intersects the child's requested toolsets with the
+  parent's, so child specialists inherit the toolsets they need without
+  losing them. `code_execution` is blocked for children by the
   SDK — specialists use `terminal` for shell-driven code instead.
 - **Operator inject.** TUI and CLI feed inbox.jsonl; the orchestrator drains
   it before every CTO iteration and via `step_callback` between iterations,
   then calls `agent.steer(text)` so the model sees the inject on its next
-  API call (sub-iteration latency, verified in Phase 0 spike B).
+  API call (sub-iteration latency).
 - **Single supervisor tick.** A no-LLM classifier iterates every project in
   the SQLite index, asks `watchdog.classify` what state it's in (using
   `os.kill(pid, 0)` as the liveness probe), and respawns the daemon on
