@@ -45,6 +45,13 @@ for pkg in ["pydantic", "pydantic_core"]:
     binaries += b
     hiddenimports += h
 
+# certifi — the updater's stdlib urllib needs its CA bundle (cacert.pem) for
+# HTTPS to GitHub; the OS trust store is not reliably found in a frozen app.
+_cd, _cb, _ch = collect_all("certifi")
+datas += _cd
+binaries += _cb
+hiddenimports += _ch
+
 # Our own package + bundled data. pyproject package-data does NOT feed
 # PyInstaller — agents_registry resolves omoikane/data at import time.
 datas += collect_data_files("omoikane")

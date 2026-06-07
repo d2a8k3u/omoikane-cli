@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import platform
+import ssl
 import sys
 import tarfile
 import tempfile
@@ -34,6 +35,25 @@ _API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 _API_LIST = f"https://api.github.com/repos/{REPO}/releases"
 _NAG_INTERVAL_SECONDS = 24 * 60 * 60  # once/day
 _HTTP_TIMEOUT = 10.0
+
+_ssl_ctx: Optional[ssl.SSLContext] = None
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """HTTPS context with a working CA bundle.
+
+    The frozen binary's stdlib ``ssl`` may not find the OS trust store, so
+    prefer ``certifi`` (bundled via httpx) and fall back to the default.
+    """
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        try:
+            import certifi
+
+            _ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:  # noqa: BLE001
+            _ssl_ctx = ssl.create_default_context()
+    return _ssl_ctx
 
 
 # --------------------------------------------------------------------------
@@ -95,7 +115,7 @@ def _get_json(url: str, timeout: float = _HTTP_TIMEOUT) -> dict:
             "Accept": "application/vnd.github+json",
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:  # noqa: S310
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -181,7 +201,7 @@ def maybe_nag(command: Optional[str], *, now: Optional[int] = None) -> None:
 # --------------------------------------------------------------------------
 def _download(url: str, dest: Path, timeout: float = 120.0) -> None:
     req = urllib.request.Request(url, headers={"User-Agent": "omoikane-cli"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:  # noqa: S310
         dest.write_bytes(resp.read())
 
 
