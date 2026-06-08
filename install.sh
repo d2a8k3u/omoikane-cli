@@ -117,3 +117,16 @@ case ":$PATH:" in
 esac
 
 "$exe" --version
+
+# --- first-run onboarding (interactive only) ---------------------------------
+# Under `curl | sh` stdin is the pipe, so prompts must come from /dev/tty.
+# Skipped when config already exists, in CI/containers (no readable tty), or
+# when OMOIKANE_NO_ONBOARD is set. `|| true` keeps `set -e` from aborting.
+if [ -z "${OMOIKANE_NO_ONBOARD:-}" ] && [ ! -e "$HOME_DIR/config.toml" ] \
+   && [ -e /dev/tty ] && [ -r /dev/tty ]; then
+  info ""
+  info "Starting onboarding..."
+  if ! "$exe" onboard </dev/tty; then
+    info "onboarding did not finish — run 'omoikane onboard' anytime to configure."
+  fi
+fi
