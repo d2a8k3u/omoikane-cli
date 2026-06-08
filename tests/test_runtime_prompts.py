@@ -40,6 +40,30 @@ def test_build_cto_system_prompt_pulls_skill(temp_hermes_home):
     assert "omoikane" in prompt
 
 
+def test_build_completeness_directive_targets_intent_and_routes_for_sizing(temp_hermes_home):
+    book = ProjectBook.create("Brief here", ["AC one", "AC two"])
+    book.satisfy_criterion(0)
+    book.satisfy_criterion(1)
+    msg = prompts.build_completeness_directive(book.project_id, book.load())
+    assert "Brief here" in msg
+    assert "AC one" in msg and "AC two" in msg
+    assert "book_set_criteria" in msg
+    # Fix work is routed through the CTO (sizing), not opened directly.
+    assert "book_request_task" in msg
+    assert "book_open_task" not in msg
+
+
+def test_specialist_manual_carries_escalation_and_upstream_read(temp_hermes_home):
+    book = ProjectBook.create("Brief", ["AC"])
+    manual = prompts.build_role_system_prompt(
+        book.project_id, book.load(),
+        role="agent-backend-engineer",
+        enabled_toolsets=["file", "terminal", "omoikane"],
+    )
+    assert "book_request_task" in manual            # escalation channel
+    assert "upstream-decision" in manual.lower() or "upstream" in manual.lower()
+
+
 def test_history_round_trip(temp_hermes_home):
     book = ProjectBook.create("Brief", ["AC"])
     sample = [

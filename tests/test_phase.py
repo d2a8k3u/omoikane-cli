@@ -96,10 +96,24 @@ def test_phase_becomes_meta_when_only_routing_tasks_remain(temp_hermes_home):
 def test_satisfying_all_criteria_drives_status_done(temp_hermes_home):
     book = ProjectBook.create("brief", ["A"])
     orch = TeamOrchestrator(book.project_id)
-    # Completion requires all criteria satisfied AND no open tasks.
+    # Completion requires all criteria satisfied, no open tasks, AND the bounded
+    # completeness review. The continuation path files completeness routing
+    # tasks until the cap; drive run_once + drain until it converges.
     book.update_status("in_progress")
     book.satisfy_criterion(0, evidence="manual")
+
+    def _drain():
+        data = book.load()
+        if data.get("open_tasks"):
+            data["open_tasks"] = []
+            book.store.save_book(data)
+
     result = orch.run_once()
+    for _ in range(8):
+        if result["status"] == "completed":
+            break
+        _drain()
+        result = orch.run_once()
     assert result["status"] == "completed"
     assert book.status == "done"
     assert book.current_phase == "completed"

@@ -103,9 +103,17 @@ def test_project_done_only_when_all_criteria_satisfied_and_no_open_tasks(temp_he
     orch.run_once()
     assert book.load()["status"] != "done"
 
-    # Drain the remaining task → now both conditions hold → done.
+    # Drain the remaining task → criteria satisfied + no open work, but the
+    # bounded completeness review must still run before the project is done.
+    # The continuation path files completeness routing tasks until the cap is
+    # reached; drive run_once + drain until it converges.
     _drain()
     result = orch.run_once()
+    for _ in range(8):
+        if result["status"] == "completed":
+            break
+        _drain()
+        result = orch.run_once()
     assert result["status"] == "completed"
     assert book.load()["status"] == "done"
 
@@ -115,3 +123,60 @@ def test_run_once_idempotent_when_already_done(temp_hermes_home):
     book.update_status("done", phase="completed")
     result = TeamOrchestrator(book.project_id).run_once()
     assert result["status"] == "already_done"
+
+
+def test_open_escalation_blocks_completion(temp_hermes_home):
+    # Requirement: a deficiency any agent escalates to the CTO must be resolved
+    # before the project is done. The escalation is a book_request_task — an
+    # open task — so completion (which requires no open tasks) is gated by it
+    # even when every acceptance criterion is already satisfied.
+    book = ProjectBook.create("brief", ["A"])
+    book.update_status("in_progress")
+    book.satisfy_criterion(0, evidence="checked")
+
+    book.request_task(
+        "Fix data loss on empty input",
+        requester_role="agent-backend-engineer",
+        rationale="found mid-build; must be fixed before done",
+        suggested_role="agent-backend-engineer",
+    )
+
+    orch = TeamOrchestrator(book.project_id)
+    result = orch.run_once()
+    assert result["status"] != "completed"
+    assert book.load()["status"] != "done"
+    assert book.load()["open_tasks"]  # the escalation still gates completion
+
+
+def test_escalated_criterion_gates_completion(temp_hermes_home):
+    # When the CTO folds an acceptance-level escalation into the contract, the
+    # new 'escalated' criterion is pending and blocks all_criteria_satisfied.
+    book = ProjectBook.create("brief", ["A"])
+    book.satisfy_criterion(0, evidence="ok")
+    assert book.all_criteria_satisfied()
+    book.set_criteria([{"text": "no data loss on empty input", "provenance": "escalated"}])
+    assert not book.all_criteria_satisfied()  # the escalated gap re-opens the gate
+    assert book.load()["criteria_provenance"]["1"] == "escalated"
+
+
+def test_empty_criteria_auto_decompose_files_derivation_task(temp_hermes_home):
+    # A brief-only project (no criteria): when no tasks remain, the orchestrator
+    # files a product-analyst derivation task — the completion contract must be
+    # established before anything else.
+    book = ProjectBook.create("Brief only, no criteria", [])
+    orch = TeamOrchestrator(book.project_id)
+    orch.run_once()  # bootstrap
+
+    # Drain bootstrap tasks without writing any criteria.
+    while book.load().get("open_tasks"):
+        data = book.load()
+        data["open_tasks"] = []
+        book.store.save_book(data)
+
+    result = orch.run_once()
+    assert result["status"] == "in_progress"
+    nd = result["next_delegation"]
+    meta = book.load()["task_meta"][nd["task"]]
+    assert meta["suggested_role"] == "agent-product-analyst"
+    assert "book_set_criteria" in meta["rationale"]
+    assert "derive" in nd["title"].lower()
