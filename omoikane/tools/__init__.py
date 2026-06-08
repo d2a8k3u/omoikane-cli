@@ -28,11 +28,10 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-# Module-name → (schema_const, handler_attr) mapping. The 19 entries
-# below mirror ``plugins/omoikane/__init__.py:register(ctx)`` 1:1 so the
-# tool surface visible to the LLM is byte-equivalent to the legacy
-# plugin and the orchestrator-protocol SKILL.md briefs keep working
-# without rewrites.
+# Module-name → (schema_const, handler_attr) mapping. The 20 entries
+# below mirror ``plugins/omoikane/__init__.py:register(ctx)`` (plus the
+# standalone-only ``book_set_criteria``) so the tool surface visible to
+# the LLM stays aligned with the orchestrator-protocol SKILL.md briefs.
 _TOOL_SPECS: Dict[str, tuple] = {
     # M1 — project lifecycle
     "project_start": ("PROJECT_START", "project_start"),
@@ -52,6 +51,7 @@ _TOOL_SPECS: Dict[str, tuple] = {
     "book_request_task": ("BOOK_REQUEST_TASK", "book_request_task"),
     "book_assign_task": ("BOOK_ASSIGN_TASK", "book_assign_task"),
     "book_satisfy_criterion": ("BOOK_SATISFY_CRITERION", "book_satisfy_criterion"),
+    "book_set_criteria": ("BOOK_SET_CRITERIA", "book_set_criteria"),
     "book_set_roadmap": ("BOOK_SET_ROADMAP", "book_set_roadmap"),
     "prepare_manager_handoff": (
         "PREPARE_MANAGER_HANDOFF",
@@ -154,6 +154,7 @@ from .handlers import (  # noqa: E402,F401  (re-export)
     book_request_task,
     book_resolve_approval,
     book_satisfy_criterion,
+    book_set_criteria,
     book_set_roadmap,
     book_split_task,
     prepare_manager_handoff,
@@ -177,6 +178,7 @@ __all__ = [
     "book_request_task",
     "book_resolve_approval",
     "book_satisfy_criterion",
+    "book_set_criteria",
     "book_set_roadmap",
     "book_split_task",
     "is_registered",
