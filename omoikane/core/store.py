@@ -223,6 +223,13 @@ class ProjectStore:
                     "brief": brief,
                     "acceptance_criteria": acceptance_criteria,
                     "criteria_status": {str(i): "pending" for i in range(len(acceptance_criteria))},
+                    "criteria_provenance": {
+                        str(i): "operator_given" for i in range(len(acceptance_criteria))
+                    },
+                    "completeness_passes": 0,
+                    "completeness_clean": False,
+                    "derivation_retries": 0,
+                    "review_criteria": False,
                     "status": "created",
                     "current_phase": "planning",
                     "starting_state": starting_state,
