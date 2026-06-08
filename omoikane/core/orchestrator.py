@@ -36,7 +36,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from .book import ProjectBook
+from .book import DEFAULT_COMPLETENESS_PASS_CAP, ProjectBook
 from .agents_registry import get_registry
 from .execution import choose_execution_mode
 
@@ -130,14 +130,16 @@ class TeamOrchestrator:
         open_tasks: List[str] = list(data.get("open_tasks", []))
 
         # A project is complete only when EVERY acceptance criterion is
-        # satisfied AND no tasks remain open. Criteria satisfaction alone does
-        # not finish it — queued work (README, QA, …) must still be executed.
-        if self.book.all_criteria_satisfied() and not open_tasks:
+        # satisfied, no tasks remain open, AND the bounded completeness review
+        # has run (a clean pass, or the pass cap reached). Criteria satisfaction
+        # alone does not finish it — queued work (README, QA, the completeness
+        # pass, …) must still be executed.
+        if self.book.completeness_satisfied(DEFAULT_COMPLETENESS_PASS_CAP):
             self.book.update_status("done", phase="completed")
             self.book.log(
                 "decision",
-                "All acceptance criteria satisfied and all tasks complete. "
-                "Project complete.",
+                "All acceptance criteria satisfied, completeness verified, and "
+                "all tasks complete. Project complete.",
             )
             # Tear down the per-project supervisor cron immediately so the
             # next scheduler tick doesn't waste a slot. Soft-fail: the
@@ -221,7 +223,7 @@ class TeamOrchestrator:
                           else "agent-implementer")
 
         analyst_id = self.book.open_task(
-            title="Refine the brief into checkable user stories and acceptance-mapped requirements",
+            title="Derive and extract acceptance criteria from the brief, then refine into checkable user stories",
             assignee_role=analyst_role,
             phase="analysis",
         )
@@ -239,11 +241,18 @@ class TeamOrchestrator:
             "running first; once both close, you will be dispatched here with "
             "their reflections in your context.\n\n"
             f"Brief:\n  {brief}\n\n"
-            f"Acceptance criteria (in order):\n{criteria_block}\n\n"
+            f"Acceptance criteria at kickoff time (may be empty here — the "
+            f"analyst derives them via book_set_criteria; read the LIVE list "
+            f"in your dispatched context, not this snapshot):\n{criteria_block}\n\n"
             "Procedure when you receive this task:\n"
+            "  0. If acceptance_criteria is still EMPTY, do NOT commit a "
+            "roadmap with empty criteria_indices — file book_request_task to "
+            "agent-product-analyst to derive them first, then close this "
+            "kickoff. The completion contract must exist before the build.\n"
             "  1. Read the analyst + architect reflections (listed in the "
             "'Completed work and reflections' block).\n"
-            "  2. Decide milestones and call book_set_roadmap(milestones=[...]).\n"
+            "  2. Decide milestones and call book_set_roadmap(milestones=[...]) "
+            "mapping each to the now-populated criteria_indices.\n"
             "  3. For each milestone file executor tasks via book_open_task "
             "(title, assignee_role, phase, milestone_id).\n"
             "  4. Optionally book_reflect(...) with the roadmap rationale.\n"
@@ -281,29 +290,77 @@ class TeamOrchestrator:
         )
 
     def _auto_decompose(self, data: Dict[str, Any]) -> Optional[str]:
-        """File a CTO routing task to break the no-tasks/criteria-pending
-        deadlock. Returns the new task id, or ``None`` if no criteria are
-        actually pending (defensive)."""
+        """File a CTO routing task to break a no-open-tasks deadlock.
+
+        Three states, in priority order:
+
+        1. **No criteria yet** → file a product-analyst derivation task. The
+           completion contract must exist before any build proceeds.
+        2. **Criteria pending** → file a decomposition task toward them.
+        3. **All criteria satisfied but completeness not yet verified** → file a
+           single QA completeness review (the continuation path has no
+           deterministic driver to run the bounded pass itself). Recording the
+           pass bounds it: ``run_once`` declares done once the pass cap is hit.
+
+        Returns the new task id, or ``None`` when nothing needs filing.
+        """
         criteria = data.get("acceptance_criteria", [])
         status = data.get("criteria_status", {})
+
+        # 1. No completion contract — derive it first.
+        if not criteria:
+            return self.book.request_task(
+                title="Derive the acceptance criteria from the brief now via book_set_criteria",
+                requester_role="orchestrator",
+                rationale=(
+                    "The project has no acceptance criteria yet. Derive them "
+                    "from the brief — extract any stated literally (provenance "
+                    "'extracted'), synthesize the rest from intent (provenance "
+                    "'synthesized') — and write them with book_set_criteria. "
+                    "The build cannot start without a completion contract."
+                ),
+                suggested_role="agent-product-analyst",
+            )
+
+        # 2. Some criteria still pending — decompose the remaining work.
         pending = [
             f"  [{i}] {criteria[i]}"
             for i in range(len(criteria))
             if status.get(str(i)) != "satisfied"
         ]
-        if not pending:
-            return None
-        rationale = (
-            "No open tasks remain but these acceptance criteria are still "
-            "pending. Decide who should advance them and assign the work.\n"
-            + "\n".join(pending)
-        )
-        return self.book.request_task(
-            title="Decompose remaining work toward acceptance criteria",
-            requester_role="orchestrator",
-            rationale=rationale,
-            suggested_role="agent-product-analyst",
-        )
+        if pending:
+            rationale = (
+                "No open tasks remain but these acceptance criteria are still "
+                "pending. Decide who should advance them and assign the work.\n"
+                + "\n".join(pending)
+            )
+            return self.book.request_task(
+                title="Decompose remaining work toward acceptance criteria",
+                requester_role="orchestrator",
+                rationale=rationale,
+                suggested_role="agent-product-analyst",
+            )
+
+        # 3. All satisfied but completeness unverified — file ONE bounded
+        #    completeness review and record the pass so the gate converges.
+        if not self.book.completeness_satisfied(DEFAULT_COMPLETENESS_PASS_CAP):
+            task_id = self.book.request_task(
+                title="Completeness review: verify the build fulfils the brief's intent",
+                requester_role="orchestrator",
+                rationale=(
+                    "Every listed acceptance criterion is satisfied. Before "
+                    "declaring done, review the brief's INTENT for gaps — "
+                    "implied features, edge cases, consequences. Append any "
+                    "genuinely-missing criteria via "
+                    "book_set_criteria(provenance='synthesized') and file fix "
+                    "work via book_request_task. If nothing is missing, say so."
+                ),
+                suggested_role="agent-qa-reviewer",
+            )
+            self.book.record_completeness_pass(clean=False)
+            return task_id
+
+        return None
 
     def _is_blocked(self, task_id: str, data: Dict[str, Any]) -> bool:
         """A task is blocked while any id in its ``blocked_by`` remains open."""
@@ -514,6 +571,34 @@ class TeamOrchestrator:
         if role == "agent-cto":
             cto_state_block = self._cto_state_block(data)
 
+        # Cooperation: surface upstream decisions to a non-CTO executor so it
+        # builds on the architect's / analyst's choices instead of re-deciding.
+        specialist_state_block = ""
+        if role != "agent-cto" and not routing:
+            specialist_state_block = self._specialist_state_block(
+                data, role=role, milestone_id=meta.get("milestone_id"),
+            )
+
+        # Universal escalation: any executor can hand a found problem to CTO,
+        # which folds acceptance-level gaps into the roadmap + criteria so they
+        # gate completion (book_request_task lands an open task on CTO's desk).
+        escalation_block = ""
+        if not routing:
+            escalation_block = (
+                "\n=== Escalation ===\n"
+                "If you find a problem, blocker, missing requirement, or "
+                "deficiency that must be fixed before the project is done — "
+                "even outside this task — do NOT silently work around it. File "
+                "it to the CTO:\n"
+                f"  book_request_task(project_id='{self.project_id}', "
+                "title=<the problem>, rationale=<why it must be fixed before "
+                f"done>, requester_role='{role}', suggested_role=<who fixes "
+                "it>)\n"
+                "The CTO routes it and, if it changes what 'done' means, folds "
+                "it into the roadmap and acceptance criteria. It blocks "
+                "completion until resolved.\n"
+            )
+
         # Task-size budget guidance for every non-routing specialist —
         # routing tasks are short by construction and CTO has its own
         # sizing rules in its SKILL.md.
@@ -555,12 +640,14 @@ class TeamOrchestrator:
             f"=== Project brief ===\n{data.get('brief', '').strip()}\n\n"
             f"=== Acceptance criteria ===\n{criteria_lines}\n"
             f"{routing_block}"
-            f"{cto_state_block}\n"
+            f"{cto_state_block}"
+            f"{specialist_state_block}\n"
             f"=== Your assignment ===\n"
             f"Task id:    {task_id}\n"
             f"Title:      {title}\n"
             f"Expected:   {expected}\n"
-            f"{size_block}\n"
+            f"{size_block}"
+            f"{escalation_block}\n"
             f"=== Your role's SKILL.md ===\n{skill_content.strip() or '(empty)'}"
         )
 
@@ -576,6 +663,141 @@ class TeamOrchestrator:
             "toolsets": toolsets,
             "expected": expected,
         }
+
+    def _collect_reflections_by_task(self) -> Dict[str, str]:
+        """Map task id → newest reflection ref (relative to the project dir).
+
+        Two paths produce reflections — both are surfaced, newest wins:
+          - ``book_record_result(reflection=...)`` stores a ref on the
+            delegation tree's edge (``to`` node id ``n-<task>``).
+          - An agent calling ``book.reflect()`` directly writes
+            ``reflections/r-<ts>-<task_id>.md`` without touching the tree.
+
+        Best-effort: never raise — a missing tree or directory just yields
+        fewer entries, never a failed dispatch.
+        """
+        refl_by_task: Dict[str, str] = {}
+        # 1. Edges in the delegation tree (book_record_result path).
+        try:
+            tree = self.book.store._load_delegation()
+            for edge in tree.get("edges", []):
+                ref = edge.get("reflection_ref")
+                node_id = edge.get("to") or ""
+                if not ref or not node_id.startswith("n-"):
+                    continue
+                refl_by_task[node_id[len("n-"):]] = ref
+        except Exception:
+            pass
+
+        # 2. Direct-reflect path: scan reflections/ for ``r-<ts>-<task_id>.md``
+        #    and pick the newest per task (lex order == chronological because
+        #    of the %Y%m%dT%H%M%S timestamp format).
+        try:
+            refl_dir = self.book.store.project_dir / "reflections"
+            if refl_dir.is_dir():
+                for path in sorted(refl_dir.glob("r-*-*.md")):
+                    stem = path.stem  # "r-{ts}-{task_id}"
+                    parts = stem.split("-", 2)
+                    if len(parts) < 3:
+                        continue
+                    suffix = parts[2]
+                    if suffix == "general":
+                        continue
+                    refl_by_task[suffix] = f"reflections/{path.name}"
+        except Exception:
+            pass
+
+        return refl_by_task
+
+    def _specialist_state_block(
+        self,
+        data: Dict[str, Any],
+        *,
+        role: str,
+        milestone_id: Optional[str],
+        max_reflections: int = 4,
+    ) -> str:
+        """Upstream-decision context for a non-CTO executor (cooperation).
+
+        Token-budgeted on purpose — a specialist does NOT need the whole
+        project state, only what bears on its task:
+          1. its OWN milestone (title/description + the criteria it covers),
+          2. the most relevant prior reflections — those from completed tasks
+             sharing this ``milestone_id`` first, then newest-N to fill the
+             budget — as absolute file paths the ``file`` toolset can open,
+          3. recent artifact paths.
+
+        Empty inputs yield a short "(none recorded yet)" note; never raises.
+        """
+        meta = data.get("task_meta", {})
+        completed = data.get("completed_tasks", [])
+        criteria = data.get("acceptance_criteria", [])
+        project_dir = self.book.store.project_dir
+        refl_by_task = self._collect_reflections_by_task()
+
+        # 1. The executor's own milestone, with its criteria resolved to text.
+        milestone_section = ""
+        if milestone_id:
+            milestone = next(
+                (m for m in (data.get("roadmap") or [])
+                 if m.get("milestone_id") == milestone_id),
+                None,
+            )
+            if milestone:
+                idxs = milestone.get("criteria_indices") or []
+                crit_lines = "\n".join(
+                    f"      - [{i}] {criteria[i]}"
+                    for i in idxs if 0 <= i < len(criteria)
+                ) or "      (no criteria mapped)"
+                desc = (milestone.get("description") or "").strip()
+                milestone_section = (
+                    f"\n=== Your milestone ===\n"
+                    f"  {milestone.get('milestone_id')}: {milestone.get('title')}\n"
+                    + (f"  {desc}\n" if desc else "")
+                    + "  Acceptance criteria this milestone must satisfy:\n"
+                    + crit_lines
+                    + "\n"
+                )
+
+        # 2. Relevant reflections: same-milestone completed tasks first, then
+        #    newest-N (completed_tasks is append-order, so reversed == newest).
+        same_ms = [
+            tid for tid in completed
+            if meta.get(tid, {}).get("milestone_id") == milestone_id
+            and milestone_id is not None
+            and tid in refl_by_task
+        ]
+        ordered: List[str] = list(same_ms)
+        for tid in reversed(completed):
+            if tid in refl_by_task and tid not in ordered:
+                ordered.append(tid)
+        refl_lines: List[str] = []
+        for tid in ordered[:max_reflections]:
+            tmeta = meta.get(tid, {})
+            assignee = tmeta.get("assignee_role") or "?"
+            title = tmeta.get("title", tid)
+            abs_path = str(project_dir / refl_by_task[tid])
+            refl_lines.append(f"  - {tid} [{assignee}] {title} — {abs_path}")
+        refl_section = (
+            "\n=== Upstream decisions (read these before you start) ===\n"
+            + ("\n".join(refl_lines) if refl_lines
+               else "  (no upstream decisions recorded yet)")
+            + "\n"
+        )
+
+        # 3. Recent artifacts.
+        artifacts = data.get("artifacts") or []
+        art_section = ""
+        if artifacts:
+            art_lines = [
+                f"  - {a.get('kind', '?')}: {project_dir / a.get('path', '')}"
+                for a in artifacts[-max_reflections:]
+            ]
+            art_section = (
+                "\n=== Recent artifacts ===\n" + "\n".join(art_lines) + "\n"
+            )
+
+        return milestone_section + refl_section + art_section
 
     def _cto_state_block(self, data: Dict[str, Any]) -> str:
         """CTO-only context: completed work + reflections + current roadmap.
@@ -598,40 +820,7 @@ class TeamOrchestrator:
         completed = data.get("completed_tasks", [])
         project_dir = self.book.store.project_dir
 
-        refl_by_task: Dict[str, str] = {}
-        # 1. Edges in the delegation tree (book_record_result path).
-        try:
-            tree = self.book.store._load_delegation()
-            for edge in tree.get("edges", []):
-                ref = edge.get("reflection_ref")
-                node_id = edge.get("to") or ""
-                if not ref or not node_id.startswith("n-"):
-                    continue
-                refl_by_task[node_id[len("n-"):]] = ref
-        except Exception:
-            pass  # best-effort — never block CTO dispatch on a tree read
-
-        # 2. Direct-reflect path: scan reflections/ for files named
-        #    ``r-<ts>-<task_id>.md`` and pick the newest per task.
-        try:
-            refl_dir = project_dir / "reflections"
-            if refl_dir.is_dir():
-                for path in sorted(refl_dir.glob("r-*-*.md")):
-                    # Filename format: r-{ts}-{suffix}.md  where suffix is
-                    # the task id (or "general"). Split on the first two
-                    # dashes from the left to isolate the suffix.
-                    stem = path.stem  # "r-{ts}-{task_id}"
-                    parts = stem.split("-", 2)
-                    if len(parts) < 3:
-                        continue
-                    suffix = parts[2]
-                    if suffix == "general":
-                        continue
-                    # Use sorted order (lex == chronological because of the
-                    # %Y%m%dT%H%M%S format) so the last write wins.
-                    refl_by_task[suffix] = f"reflections/{path.name}"
-        except Exception:
-            pass
+        refl_by_task = self._collect_reflections_by_task()
 
         lines: List[str] = []
         for tid in completed:
