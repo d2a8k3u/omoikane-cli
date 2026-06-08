@@ -128,10 +128,17 @@ def build_role_system_prompt(
         f"You are the {role} agent in the Omoikane team. You have been delegated "
         "exactly ONE task; its full assignment is in the user message. Do the "
         "work for real:\n"
+        "  - Before you start, open and read the upstream-decision reflection "
+        "files listed in your assignment context — build on the architect's / "
+        "analyst's choices instead of re-deciding them.\n"
         "  - Use your file / terminal toolsets to CREATE and EDIT real files in "
         "the current working directory. Do not merely describe a plan.\n"
         "  - Record durable outcomes with the Project Book tools (book_log, "
         "book_reflect, book_add_artifact) when relevant.\n"
+        "  - If you find a problem, blocker, or deficiency that must be fixed "
+        "before the project is done — even outside this task — do NOT silently "
+        "work around it. File it to the CTO via book_request_task(...); it will "
+        "be folded into the roadmap and block completion until resolved.\n"
         "  - When the task is genuinely complete, stop with a short summary "
         "naming the files you changed and the verification you ran.\n"
         "Do not call delegate_task — you are a leaf worker, not the "
@@ -201,6 +208,45 @@ def build_qa_directive(project_id: str, book: Mapping[str, Any]) -> str:
         "Do NOT satisfy a criterion you could not actually verify. "
         f"The Project Book lives at {path_hint}. When done, stop with a short "
         "summary of what passed and what you filed."
+    )
+
+
+def build_completeness_directive(project_id: str, book: Mapping[str, Any]) -> str:
+    """``user_message`` for ONE bounded completeness pass.
+
+    Runs after every enumerated acceptance criterion is satisfied. The reviewer
+    checks the brief's *intent* (implied features, edge cases, consequences)
+    against the criteria and either appends genuinely-missing criteria once or
+    confirms the intent is fully covered.
+    """
+    criteria = book.get("acceptance_criteria") or []
+    criteria_block = "\n".join(f"  ({i}) {c}" for i, c in enumerate(criteria)) or "  (none)"
+    path_hint = _project_path_hint(project_id)
+    return (
+        f"You are the QA reviewer running a COMPLETENESS pass for project "
+        f"{project_id}. Every listed acceptance criterion is already satisfied "
+        "— your job now is to decide whether the build is genuinely 'thought "
+        "through to its consequences', not just literally compliant.\n\n"
+        f"Project brief:\n{(book.get('brief') or '').strip()}\n\n"
+        f"Satisfied acceptance criteria:\n{criteria_block}\n\n"
+        "Compare the brief's INTENT against the criteria above. Look for "
+        "implied-but-unstated features, unhandled edge cases, error/empty/"
+        "failure paths, security or data-integrity consequences, and anything a "
+        "careful operator would expect but the criteria miss.\n\n"
+        "Then do EXACTLY ONE of:\n"
+        "  - If you find a genuine gap, append the missing checkable "
+        "criteria via book_set_criteria(project_id, criteria=[{text, "
+        "provenance='synthesized'}, ...]), and file the build work via "
+        "book_request_task(project_id, title=<fix>, rationale=<why>, "
+        "requester_role='agent-qa-reviewer', suggested_role=<role>) so the CTO "
+        "routes AND sizes it — do not open the build task directly (that "
+        "bypasses sizing).\n"
+        "  - If the brief's intent is already fully covered, append nothing and "
+        "say so plainly.\n\n"
+        "Only append criteria you can phrase as a concrete check. Do not "
+        "re-satisfy or edit existing criteria. "
+        f"The Project Book lives at {path_hint}. Stop with a short summary of "
+        "what (if anything) you added."
     )
 
 
@@ -350,6 +396,7 @@ __all__ = [
     "INJECT_END",
     "INJECT_START",
     "approval_addendum",
+    "build_completeness_directive",
     "build_cto_system_prompt",
     "build_followup_directive",
     "build_initial_directive",
