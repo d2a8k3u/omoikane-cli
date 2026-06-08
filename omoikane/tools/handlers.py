@@ -67,17 +67,25 @@ def project_start(args: dict, **kwargs) -> str:
         if not brief:
             return json.dumps({"error": "brief is required"})
 
+        # Criteria are optional. When omitted, the product analyst derives them
+        # from the brief during the analysis phase (see agent-product-analyst).
         criteria = args.get("acceptance_criteria") or []
-        if not criteria:
-            return json.dumps({"error": "acceptance_criteria is required"})
-
         state = args.get("starting_state", "scratch")
+        review_criteria = bool(args.get("review_criteria"))
 
         book = ProjectBook.create(
             brief=brief,
             acceptance_criteria=criteria,
             starting_state=state,
         )
+
+        # Opt-in one-shot pause: the driver surfaces the derived criteria and
+        # stops once before committing the roadmap so the operator can review.
+        if review_criteria:
+            def _set_review(data: dict) -> None:
+                data["review_criteria"] = True
+
+            book.store.update_book(_set_review)
 
         # Capture origin platform + chat_id so the supervisor can route
         # approval pushes back to the operator's main channel.
@@ -622,6 +630,54 @@ def book_satisfy_criterion(args: dict, **kwargs) -> str:
         })
     except Exception as e:
         return json.dumps({"error": f"book_satisfy_criterion failed: {e}"})
+
+
+_CRITERIA_PROVENANCE = ("operator_given", "extracted", "synthesized", "escalated")
+
+
+def book_set_criteria(args: dict, **kwargs) -> str:
+    """Append acceptance criteria (analyst derivation / CTO escalation / QA gap).
+
+    Append-only: never edits or reorders existing criteria. Validates each
+    entry's text and provenance, then delegates to
+    :meth:`ProjectBook.set_criteria`.
+    """
+    try:
+        project_id = args.get("project_id")
+        items = args.get("criteria")
+        if not project_id:
+            return json.dumps({"error": "project_id is required"})
+        if not isinstance(items, list) or not items:
+            return json.dumps({"error": "criteria must be a non-empty list"})
+
+        normalized = []
+        for i, entry in enumerate(items):
+            if not isinstance(entry, dict):
+                return json.dumps({"error": f"criteria[{i}] must be an object"})
+            text = str(entry.get("text") or "").strip()
+            if not text:
+                return json.dumps({"error": f"criteria[{i}].text is required"})
+            provenance = entry.get("provenance") or "synthesized"
+            if provenance not in _CRITERIA_PROVENANCE:
+                return json.dumps({
+                    "error": (
+                        f"criteria[{i}].provenance must be one of "
+                        f"{', '.join(_CRITERIA_PROVENANCE)}"
+                    )
+                })
+            normalized.append({"text": text, "provenance": provenance})
+
+        book = ProjectBook(project_id)
+        new_indices = book.set_criteria(normalized)
+        data = book.load()
+        return json.dumps({
+            "success": True,
+            "new_indices": new_indices,
+            "criteria_count": len(data.get("acceptance_criteria", [])),
+            "criteria_status": data.get("criteria_status", {}),
+        })
+    except Exception as e:
+        return json.dumps({"error": f"book_set_criteria failed: {e}"})
 
 
 # === M5: Project continuation ===

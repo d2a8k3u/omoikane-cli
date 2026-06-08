@@ -17,7 +17,11 @@ PROJECT_START = {
             "acceptance_criteria": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Concrete, checkable conditions for completion"
+                "description": (
+                    "Optional. Concrete, checkable conditions for completion. "
+                    "When omitted, the product analyst derives them from the "
+                    "brief (extracting any the brief already states)."
+                )
             },
             "starting_state": {
                 "type": "string",
@@ -26,7 +30,7 @@ PROJECT_START = {
                 "default": "scratch"
             }
         },
-        "required": ["brief", "acceptance_criteria"]
+        "required": ["brief"]
     }
 }
 
@@ -359,6 +363,55 @@ BOOK_SATISFY_CRITERION = {
             },
         },
         "required": ["project_id", "index", "evidence"],
+    },
+}
+
+
+BOOK_SET_CRITERIA = {
+    "name": "book_set_criteria",
+    "description": (
+        "APPEND acceptance criteria to a project. Append-only — never edits, "
+        "reorders, or deletes existing criteria, so already-satisfied indices "
+        "and operator-given criteria stay fixed. Sanctioned writers: "
+        "agent-product-analyst (deriving criteria from a brief that supplied "
+        "none), agent-cto (folding an acceptance-level escalation into the "
+        "contract), and agent-qa-reviewer (filling a genuine gap found during "
+        "the completeness pass). Each entry needs checkable text and a "
+        "provenance tag. Exact-duplicate text is skipped."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "project_id": {"type": "string"},
+            "criteria": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "A single checkable acceptance criterion.",
+                        },
+                        "provenance": {
+                            "type": "string",
+                            "enum": [
+                                "operator_given",
+                                "extracted",
+                                "synthesized",
+                                "escalated",
+                            ],
+                            "description": (
+                                "extracted = stated literally in the brief; "
+                                "synthesized = implied by the brief's intent; "
+                                "escalated = a deficiency raised mid-build."
+                            ),
+                        },
+                    },
+                    "required": ["text"],
+                },
+            },
+        },
+        "required": ["project_id", "criteria"],
     },
 }
 
