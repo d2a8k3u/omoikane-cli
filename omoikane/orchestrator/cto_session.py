@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from omoikane.core.book import ProjectBook
+from omoikane.core.book import DEFAULT_COMPLETENESS_PASS_CAP, ProjectBook
 from omoikane.runtime import activity_emitter as _activity
 from omoikane.runtime import injection as _injection
 from omoikane.runtime import prompts as _prompts
@@ -41,6 +41,9 @@ _TERMINAL_STATUSES = frozenset({"done", "failed", "cancelled"})
 _DEFAULT_TASK_CAP = 100
 # Consecutive rounds with no task closed / no criteria change → declare blocked.
 _NO_PROGRESS_LIMIT = 3
+# Bounded "thought-through-to-consequences" completeness passes — loop until a
+# pass finds nothing new, or this many passes have run (whichever comes first).
+_COMPLETENESS_PASS_CAP = DEFAULT_COMPLETENESS_PASS_CAP
 
 
 @dataclass
@@ -157,14 +160,74 @@ def run_long_session(
                 return iterations
 
             open_tasks = list(data.get("open_tasks") or [])
+            criteria = data.get("acceptance_criteria") or []
             all_sat = book.all_criteria_satisfied()
 
+            # Opt-in review gate: pause ONCE after the analyst has derived
+            # criteria but before the CTO commits the roadmap, so the operator
+            # can inspect the completion contract. No-op when criteria were
+            # operator-given (nothing to review). The driver consumes the flag
+            # on pause, so `omoikane resume` simply re-enters and proceeds.
+            provenance = data.get("criteria_provenance") or {}
+            if (
+                data.get("review_criteria")
+                and criteria
+                and any(p != "operator_given" for p in provenance.values())
+                and not data.get("roadmap")
+            ):
+                emitter.emit("orchestrator", {
+                    "event": "criteria_review",
+                    "summary": "derived criteria awaiting operator review",
+                    "criteria": criteria,
+                })
+                book.clear_review_criteria()
+                return iterations
+
+            # Completion gate with a bounded completeness loop: once every
+            # criterion is satisfied and no tasks remain, run a completeness
+            # review against the brief's intent. Repeat until a pass finds
+            # nothing new (clean) or the cap is reached.
             if all_sat and not open_tasks:
-                return _completed("All acceptance criteria satisfied")
+                if book.completeness_satisfied(_COMPLETENESS_PASS_CAP):
+                    if data.get("completeness_clean"):
+                        return _completed("criteria satisfied; completeness verified")
+                    book.log("note", "completeness cap reached; residual gaps may remain")
+                    return _completed(
+                        "criteria satisfied; completeness cap reached (possible residual gaps)"
+                    )
+                before = len(criteria)
+                _run_focused(
+                    project_id, "agent-qa-reviewer",
+                    _prompts.build_completeness_directive(project_id, data),
+                    task_id=f"{project_id}-completeness-{iterations}",
+                    config=config, emitter=emitter, inbox=inbox,
+                    book_data=data, current=current,
+                )
+                after = book.load()
+                added = len(after.get("acceptance_criteria") or []) - before
+                new_tasks = bool(after.get("open_tasks"))
+                book.record_completeness_pass(clean=(added == 0 and not new_tasks))
+                iterations += 1
+                no_progress = 0
+                continue
 
             # Fresh project → bootstrap the planning round.
             if status in {"created", ""}:
                 orch.run_once()
+                iterations += 1
+                continue
+
+            # Empty-criteria backstop: analysis drained but no completion
+            # contract was written. Re-file derivation once, then fail loudly —
+            # never spin the QA pass against zero criteria.
+            if not open_tasks and not criteria:
+                if book.derivation_retries() >= 1:
+                    return _blocked(
+                        "analysis produced zero acceptance criteria; cannot "
+                        "derive completion contract"
+                    )
+                book.bump_derivation_retry()
+                orch.run_once()  # _auto_decompose re-files an analyst derivation task
                 iterations += 1
                 continue
 
