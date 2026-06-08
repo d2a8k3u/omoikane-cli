@@ -21,8 +21,20 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
         help="Project brief (markdown/plain text).",
     )
     parser.add_argument(
-        "--criteria", "-c", required=True, type=Path,
-        help="Acceptance criteria file (JSON array, YAML list, or plain text).",
+        "--criteria", "-c", required=False, default=None, type=Path,
+        help=(
+            "Optional acceptance criteria file (JSON array, YAML list, or plain "
+            "text). When omitted, the product analyst derives criteria from the "
+            "brief."
+        ),
+    )
+    parser.add_argument(
+        "--review-criteria", action="store_true",
+        help=(
+            "Pause once after the analyst derives criteria so you can review "
+            "them before the build plan is committed. Resume with "
+            "`omoikane resume <pid>`."
+        ),
     )
     parser.add_argument(
         "--starting-state", default="scratch", choices=["scratch", "existing"],
@@ -67,16 +79,20 @@ def run(args: argparse.Namespace) -> int:
     if not args.brief.is_file():
         print(f"brief file not found: {args.brief}", file=sys.stderr)
         return 1
-    if not args.criteria.is_file():
-        print(f"criteria file not found: {args.criteria}", file=sys.stderr)
-        return 1
 
     brief = args.brief.read_text(encoding="utf-8").strip()
     if not brief:
         print(f"brief file is empty: {args.brief}", file=sys.stderr)
         return 1
 
-    criteria = init_cmd._load_criteria(args.criteria)
+    # Criteria are optional — omit the file to have the analyst derive them.
+    if args.criteria is None:
+        criteria = []
+    elif not args.criteria.is_file():
+        print(f"criteria file not found: {args.criteria}", file=sys.stderr)
+        return 1
+    else:
+        criteria = init_cmd._load_criteria(args.criteria)
 
     from omoikane.tools.handlers import project_start
 
@@ -84,6 +100,7 @@ def run(args: argparse.Namespace) -> int:
         "brief": brief,
         "acceptance_criteria": criteria,
         "starting_state": args.starting_state,
+        "review_criteria": args.review_criteria,
     })
     response = json.loads(payload)
     if response.get("error"):
@@ -92,7 +109,10 @@ def run(args: argparse.Namespace) -> int:
 
     project_id = response["project_id"]
     print(f"Project created: {project_id}")
-    print(f"  criteria: {len(criteria)}")
+    if criteria:
+        print(f"  criteria: {len(criteria)} (operator-supplied)")
+    else:
+        print("  criteria: none supplied — the analyst will derive them from the brief")
 
     if args.no_run:
         return 0
@@ -155,4 +175,18 @@ def run(args: argparse.Namespace) -> int:
         max_iterations=args.max_iterations,
     )
     print(f"CTO session ended after {iterations} iteration(s)")
+
+    # Surface the acceptance criteria (derived ones included) so the operator
+    # can see the completion contract the team is building against.
+    if not criteria:
+        from omoikane.core.book import ProjectBook
+
+        data = ProjectBook(project_id).load()
+        derived = data.get("acceptance_criteria") or []
+        if derived:
+            provenance = data.get("criteria_provenance") or {}
+            print("Acceptance criteria:")
+            for i, text in enumerate(derived):
+                tag = provenance.get(str(i), "?")
+                print(f"  [{i}] ({tag}) {text}")
     return 0

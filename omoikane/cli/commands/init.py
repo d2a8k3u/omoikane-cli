@@ -24,10 +24,11 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
         help="Path to a markdown/plain-text file holding the project brief.",
     )
     parser.add_argument(
-        "--criteria", "-c", required=True, type=Path,
+        "--criteria", "-c", required=False, default=None, type=Path,
         help=(
-            "Path to acceptance criteria. JSON array, YAML list, or "
-            "plain text (one criterion per line; blank/`#` lines ignored)."
+            "Optional path to acceptance criteria. JSON array, YAML list, or "
+            "plain text (one criterion per line; blank/`#` lines ignored). "
+            "When omitted, the analyst derives criteria from the brief."
         ),
     )
     parser.add_argument(
@@ -87,13 +88,10 @@ def _load_criteria(path: Path) -> List[str]:
 
 def run(args: argparse.Namespace) -> int:
     brief_path: Path = args.brief
-    criteria_path: Path = args.criteria
+    criteria_path = args.criteria
 
     if not brief_path.is_file():
         print(f"brief file not found: {brief_path}", file=sys.stderr)
-        return 1
-    if not criteria_path.is_file():
-        print(f"criteria file not found: {criteria_path}", file=sys.stderr)
         return 1
 
     brief = brief_path.read_text(encoding="utf-8").strip()
@@ -101,7 +99,14 @@ def run(args: argparse.Namespace) -> int:
         print(f"brief file is empty: {brief_path}", file=sys.stderr)
         return 1
 
-    criteria = _load_criteria(criteria_path)
+    # Criteria are optional — omit the file to have the analyst derive them.
+    if criteria_path is None:
+        criteria = []
+    elif not criteria_path.is_file():
+        print(f"criteria file not found: {criteria_path}", file=sys.stderr)
+        return 1
+    else:
+        criteria = _load_criteria(criteria_path)
 
     from omoikane.tools.handlers import project_start
 
@@ -124,7 +129,10 @@ def run(args: argparse.Namespace) -> int:
         print(f"Project created: {pid}")
         print(f"  status: {response.get('status')}")
         print(f"  phase:  {response.get('phase')}")
-        print(f"  criteria: {len(criteria)}")
+        if criteria:
+            print(f"  criteria: {len(criteria)} (operator-supplied)")
+        else:
+            print("  criteria: none supplied — analyst will derive from the brief")
         message = response.get("message")
         if message:
             print(message)
