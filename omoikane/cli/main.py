@@ -27,6 +27,7 @@ def _commands() -> List[Tuple[str, str, Callable, Callable]]:
     from .commands import inject as inject_cmd
     from .commands import list as list_cmd
     from .commands import migrate as migrate_cmd
+    from .commands import onboard as onboard_cmd
     from .commands import open as open_cmd
     from .commands import resume as resume_cmd
     from .commands import self_update as self_update_cmd
@@ -48,6 +49,8 @@ def _commands() -> List[Tuple[str, str, Callable, Callable]]:
          supervisor_cmd.add_subparser, supervisor_cmd.run),
         ("approvals", "Review and resolve gated actions.",
          approvals_cmd.add_subparser, approvals_cmd.run),
+        ("onboard", "Configure API key, model, notifications, and supervisor.",
+         onboard_cmd.add_subparser, onboard_cmd.run),
         ("init-project", "Create a project book without running the CTO.",
          init_cmd.add_subparser, init_cmd.run),
         ("delete-project", "Permanently delete a project (directory + index).",
@@ -150,6 +153,38 @@ def _self_test() -> int:
     return 0
 
 
+def _should_auto_onboard(command: str) -> bool:
+    """Whether a normal CLI run should launch onboarding first.
+
+    Only fires for a configured-but-not-yet-set-up frozen install on a real
+    terminal. Excludes ``onboard`` (loop guard) and ``self-update`` (which
+    triggers onboarding itself after a successful update).
+    """
+    import os
+
+    if not command or command in {"onboard", "self-update"}:
+        return False
+    if os.environ.get("OMOIKANE_NO_ONBOARD"):
+        return False
+
+    from omoikane.config import paths, settings
+    from omoikane.update import updater
+
+    if settings.config_exists():
+        return False
+    if paths.onboard_skip_file().exists():  # user dismissed the wizard earlier
+        return False
+    if not updater.is_frozen():  # dev/editable runs shouldn't be force-onboarded
+        return False
+    if sys.stdin.isatty():
+        return True
+    try:
+        open("/dev/tty", "r").close()
+        return True
+    except OSError:
+        return False
+
+
 def main(argv: List[str] = None) -> int:
     parser, dispatch = build_parser()
     args = parser.parse_args(argv)
@@ -167,6 +202,27 @@ def main(argv: List[str] = None) -> int:
     if not args.command:
         parser.print_help()
         return 2
+
+    # First-run setup: write config.toml before the first real command runs.
+    if _should_auto_onboard(args.command):
+        from .commands import onboard as onboard_cmd
+        try:
+            onboard_cmd.run(argparse.Namespace(
+                reconfigure=False, no_supervisor=False, gate_triggered=True,
+            ))
+        except KeyboardInterrupt:
+            # onboard handles its own Ctrl-C, but guard the gate too so a stray
+            # interrupt never dumps a traceback — and leave the skip sentinel so
+            # we don't re-prompt on the next command.
+            print(file=sys.stderr)
+            try:
+                from omoikane.config import paths
+                paths.ensure_home()
+                paths.onboard_skip_file().write_text("skipped\n", encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
+        except Exception:  # noqa: BLE001 - setup must never block the command
+            logging.getLogger(__name__).debug("auto-onboard failed", exc_info=True)
 
     # Best-effort "newer version available" nag (frozen binary + TTY only;
     # throttled, fail-silent — never blocks the command).

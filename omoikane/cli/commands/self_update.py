@@ -22,4 +22,35 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> int:
     from omoikane.update import updater
 
-    return updater.self_update(force=args.force, check_only=args.check)
+    rc = updater.self_update(force=args.force, check_only=args.check)
+
+    # A user who self-updates before ever configuring still needs setup. Mirror
+    # the main-gate guards: real binary only, honor the opt-out and skip
+    # sentinel, and never raise out of this convenience path.
+    if rc == 0 and not args.check and _should_offer_onboard():
+        from omoikane.cli.commands import onboard
+
+        try:
+            onboard.run(argparse.Namespace(
+                reconfigure=False, no_supervisor=False, gate_triggered=True,
+            ))
+        except KeyboardInterrupt:
+            pass
+        except Exception:  # noqa: BLE001
+            pass
+    return rc
+
+
+def _should_offer_onboard() -> bool:
+    import os
+
+    from omoikane.config import paths, settings
+    from omoikane.update import updater
+
+    if os.environ.get("OMOIKANE_NO_ONBOARD"):
+        return False
+    if not updater.is_frozen():
+        return False
+    if settings.config_exists() or paths.onboard_skip_file().exists():
+        return False
+    return True
