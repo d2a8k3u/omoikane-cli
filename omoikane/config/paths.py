@@ -86,6 +86,15 @@ def update_check_file() -> Path:
     return home() / ".update-check"
 
 
+def onboard_skip_file() -> Path:
+    """Return ``<home>/.onboard-skipped`` — sentinel that suppresses auto-onboarding.
+
+    Written when the user dismisses the first-run wizard (Ctrl-C) so the gate
+    does not re-prompt on every subsequent command. Cleared once config exists.
+    """
+    return home() / ".onboard-skipped"
+
+
 def ensure_home() -> Path:
     """Create the home directory tree if missing. Returns the home path.
 
