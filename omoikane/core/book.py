@@ -7,7 +7,7 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .store import ProjectStore, generate_project_id
 
@@ -19,6 +19,12 @@ DEFAULT_CIRCUIT_BREAKER_MINUTES = 30
 # one fat task that will time out. Overridable per project via
 # ``book.task_size_budget_minutes`` in book.json.
 DEFAULT_TASK_SIZE_BUDGET_MINUTES = 20
+
+# Hard cap on bounded "thought-through-to-consequences" completeness passes.
+# The loop runs until a pass finds nothing new (``completeness_clean``) or this
+# many passes have run — whichever comes first. Single source for the driver
+# (cto_session) and the continuation gate (TeamOrchestrator.run_once).
+DEFAULT_COMPLETENESS_PASS_CAP = 3
 
 
 class ProjectBook:
@@ -65,6 +71,15 @@ class ProjectBook:
         })
         data.setdefault("task_size_budget_minutes", DEFAULT_TASK_SIZE_BUDGET_MINUTES)
         data.setdefault("split_requests", [])
+        # Brief-driven criteria + bounded-completeness fields. Legacy books
+        # predate these; back-fill on every read. ``criteria_provenance``
+        # back-fills to ``{}`` — pre-existing criteria carry no provenance,
+        # which is fine because immutability is structural (append-only).
+        data.setdefault("criteria_provenance", {})
+        data.setdefault("completeness_passes", 0)
+        data.setdefault("completeness_clean", False)
+        data.setdefault("derivation_retries", 0)
+        data.setdefault("review_criteria", False)
         return data
 
     def request_approval(self, *, task_id: str, requester_role: str,
@@ -614,6 +629,58 @@ class ProjectBook:
             return True
         return False
 
+    # Sanctioned provenance values for an acceptance criterion.
+    CRITERIA_PROVENANCE = ("operator_given", "extracted", "synthesized", "escalated")
+
+    def set_criteria(self, items: List[Dict[str, str]]) -> List[int]:
+        """Append acceptance criteria. APPEND-ONLY — never edits or reorders.
+
+        ``items`` is a list of ``{"text": str, "provenance": str}`` dicts. Text
+        is stripped; empty or exact-duplicate (vs existing criteria) entries are
+        skipped so a re-dispatched analyst can't double-file. New criteria land
+        at the end with status ``pending`` and the given provenance (defaulting
+        to ``synthesized``). Returns the list of new integer indices.
+
+        Append-only is the whole safety story: only new ``str(base+i)`` keys are
+        written into ``criteria_status`` / ``criteria_provenance``, so already
+        satisfied indices and operator-given criteria are structurally immutable.
+        """
+
+        def _updater(data: Dict[str, Any]) -> List[Tuple[int, str, str]]:
+            criteria: List[str] = data.setdefault("acceptance_criteria", [])
+            status: Dict[str, str] = data.setdefault("criteria_status", {})
+            prov: Dict[str, str] = data.setdefault("criteria_provenance", {})
+            existing = {c.strip() for c in criteria}
+            added: List[Tuple[int, str, str]] = []
+            for item in items:
+                text = str(item.get("text") or "").strip()
+                if not text or text in existing:
+                    continue
+                provenance = item.get("provenance") or "synthesized"
+                idx = len(criteria)
+                criteria.append(text)
+                status[str(idx)] = "pending"
+                prov[str(idx)] = provenance
+                existing.add(text)
+                added.append((idx, text, provenance))
+            if added:
+                # New work to verify — a stalled project that just grew its
+                # completion contract is making progress, not spinning.
+                data.setdefault("supervisor", {})["consecutive_no_progress_ticks"] = 0
+            return added
+
+        _, added = self.store.update_book(_updater)
+        if added:
+            self.log(
+                "decision",
+                f"Criteria appended: {len(added)}",
+                data={"criteria": [
+                    {"index": idx, "text": text, "provenance": prov}
+                    for idx, text, prov in added
+                ]},
+            )
+        return [idx for idx, _, _ in added]
+
     def all_criteria_satisfied(self) -> bool:
         """True only when every acceptance criterion has status == 'satisfied'."""
         data = self.load()
@@ -622,6 +689,63 @@ class ProjectBook:
         if not criteria:
             return False
         return all(status.get(str(i)) == "satisfied" for i in range(len(criteria)))
+
+    # === Brief-driven derivation + bounded completeness (driver-owned) ===
+
+    def derivation_retries(self) -> int:
+        """How many times the driver has re-filed criteria derivation."""
+        return int(self.load().get("derivation_retries") or 0)
+
+    def bump_derivation_retry(self) -> int:
+        """Increment the derivation-retry counter atomically. Returns the new value."""
+
+        def _updater(data: Dict[str, Any]) -> int:
+            data["derivation_retries"] = int(data.get("derivation_retries") or 0) + 1
+            return data["derivation_retries"]
+
+        _, value = self.store.update_book(_updater)
+        return value
+
+    def record_completeness_pass(self, *, clean: bool) -> None:
+        """Record that the driver ran one completeness pass.
+
+        ``clean`` is True when the pass appended no criteria and filed no new
+        tasks — the convergence signal the gate uses to declare done.
+        """
+
+        def _updater(data: Dict[str, Any]) -> None:
+            data["completeness_passes"] = int(data.get("completeness_passes") or 0) + 1
+            data["completeness_clean"] = bool(clean)
+
+        self.store.update_book(_updater)
+        self.log(
+            "note",
+            f"Completeness pass recorded (clean={clean})",
+            data={"clean": clean},
+        )
+
+    def completeness_satisfied(self, cap: int) -> bool:
+        """Done predicate shared by the driver and ``run_once``.
+
+        True only when every criterion is satisfied, no tasks remain open, and
+        either a completeness pass came back clean or the pass cap is reached.
+        """
+        if not self.all_criteria_satisfied():
+            return False
+        data = self.load()
+        if data.get("open_tasks"):
+            return False
+        return bool(data.get("completeness_clean")) or int(
+            data.get("completeness_passes") or 0
+        ) >= cap
+
+    def clear_review_criteria(self) -> None:
+        """Consume the one-shot ``--review-criteria`` pause flag."""
+
+        def _updater(data: Dict[str, Any]) -> None:
+            data["review_criteria"] = False
+
+        self.store.update_book(_updater)
 
     @property
     def status(self) -> str:
