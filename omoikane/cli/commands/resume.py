@@ -2,23 +2,15 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from typing import Optional
 
 from omoikane.runtime.agent_run import RunConfig
 
 
 def add_subparser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("project_id", help="Project identifier (proj-...).")
-    parser.add_argument(
-        "--model",
-        default=os.environ.get("OMOIKANE_MODEL", "openrouter/owl-alpha"),
-    )
-    parser.add_argument(
-        "--provider",
-        default=os.environ.get("OMOIKANE_PROVIDER", "openrouter"),
-    )
+    parser.add_argument("--model", default=None)
+    parser.add_argument("--provider", default=None)
     parser.add_argument(
         "--max-iterations", type=int, default=20,
         help="Cap on CTO iterations for this resume run (default: 20).",
@@ -27,13 +19,6 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
         "--foreground", action="store_true", default=True,
         help="Run attached to this shell (the only mode currently supported).",
     )
-
-
-def _resolve_api_key() -> Optional[str]:
-    for key in ("OMOIKANE_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
-        if os.environ.get(key):
-            return os.environ[key]
-    return None
 
 
 def run(args: argparse.Namespace) -> int:
@@ -45,11 +30,14 @@ def run(args: argparse.Namespace) -> int:
         print(f"project not found: {args.project_id}", file=sys.stderr)
         return 1
 
-    api_key = _resolve_api_key()
+    from omoikane.config import settings
+
+    cfg = settings.load_config()
+    api_key = settings.resolve_api_key(cfg)
     if not api_key:
         print(
             "No API key found. Set OMOIKANE_API_KEY / OPENROUTER_API_KEY / "
-            "ANTHROPIC_API_KEY and retry.",
+            "ANTHROPIC_API_KEY (or run `omoikane onboard`) and retry.",
             file=sys.stderr,
         )
         return 1
@@ -57,9 +45,9 @@ def run(args: argparse.Namespace) -> int:
     from omoikane.orchestrator.loop import run_foreground
 
     config = RunConfig(
-        model=args.model,
+        model=args.model or settings.resolve_model(cfg),
         api_key=api_key,
-        provider=args.provider,
+        provider=args.provider or settings.resolve_provider(cfg),
         max_iterations=args.max_iterations,
     )
     iterations = run_foreground(

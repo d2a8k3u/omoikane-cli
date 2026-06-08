@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from typing import Optional
 
 from omoikane.orchestrator import daemon as _daemon
 from omoikane.runtime.agent_run import RunConfig
@@ -20,23 +18,14 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--model", default=os.environ.get("OMOIKANE_MODEL", "openrouter/owl-alpha"),
+        "--model", default=None,
         help="Model id used if --start-if-stopped fires.",
     )
-    parser.add_argument(
-        "--provider", default=os.environ.get("OMOIKANE_PROVIDER", "openrouter"),
-    )
+    parser.add_argument("--provider", default=None)
     parser.add_argument(
         "--poll-interval", type=float, default=1.0,
         help="Polling cadence (seconds) for activity / book refresh.",
     )
-
-
-def _resolve_api_key() -> Optional[str]:
-    for key in ("OMOIKANE_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
-        if os.environ.get(key):
-            return os.environ[key]
-    return None
 
 
 def run(args: argparse.Namespace) -> int:
@@ -50,15 +39,22 @@ def run(args: argparse.Namespace) -> int:
 
     snapshot = _daemon.status(args.project_id)
     if not snapshot.is_running and args.start_if_stopped:
-        api_key = _resolve_api_key()
+        from omoikane.config import settings
+
+        cfg = settings.load_config()
+        api_key = settings.resolve_api_key(cfg)
         if not api_key:
             print(
                 "--start-if-stopped requires an API key; set OMOIKANE_API_KEY / "
-                "OPENROUTER_API_KEY / ANTHROPIC_API_KEY first.",
+                "OPENROUTER_API_KEY / ANTHROPIC_API_KEY (or run `omoikane onboard`) first.",
                 file=sys.stderr,
             )
             return 1
-        config = RunConfig(model=args.model, api_key=api_key, provider=args.provider)
+        config = RunConfig(
+            model=args.model or settings.resolve_model(cfg),
+            api_key=api_key,
+            provider=args.provider or settings.resolve_provider(cfg),
+        )
         try:
             pid = _daemon.OrchestratorDaemon.start(args.project_id, config=config, detach=True)
             print(f"started daemon: pid={pid}", file=sys.stderr)

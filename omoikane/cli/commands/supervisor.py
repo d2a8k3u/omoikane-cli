@@ -71,16 +71,15 @@ def run(args: argparse.Namespace) -> int:
     if cmd == "tick":
         config = None
         if not args.no_respawn:
-            api_key = (
-                os.environ.get("OMOIKANE_API_KEY")
-                or os.environ.get("OPENROUTER_API_KEY")
-                or os.environ.get("ANTHROPIC_API_KEY")
-            )
+            from omoikane.config import settings
+
+            api_key = settings.resolve_api_key()
             if not api_key:
                 print(
                     "supervisor tick missing API key; will skip respawns. "
                     "Set OMOIKANE_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY "
-                    "or pass --no-respawn to suppress this warning.",
+                    "(or run `omoikane onboard`), or pass --no-respawn to suppress "
+                    "this warning.",
                     file=sys.stderr,
                 )
             else:

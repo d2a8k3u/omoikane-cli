@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 from omoikane.runtime.agent_run import RunConfig
 
@@ -31,17 +29,18 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
         help="Starting state hint (default: scratch).",
     )
     parser.add_argument(
-        "--model",
-        default=os.environ.get("OMOIKANE_MODEL", "openrouter/owl-alpha"),
+        "--model", default=None,
         help=(
-            "Model id passed to AIAgent. Defaults to $OMOIKANE_MODEL or "
-            "'openrouter/owl-alpha'."
+            "Model id passed to AIAgent. Defaults to $OMOIKANE_MODEL, then "
+            "config.toml [model].id, then 'openrouter/owl-alpha'."
         ),
     )
     parser.add_argument(
-        "--provider",
-        default=os.environ.get("OMOIKANE_PROVIDER", "openrouter"),
-        help="LLM provider passed to AIAgent (default: openrouter).",
+        "--provider", default=None,
+        help=(
+            "LLM provider passed to AIAgent. Defaults to $OMOIKANE_PROVIDER, "
+            "then config.toml [model].provider, then 'openrouter'."
+        ),
     )
     parser.add_argument(
         "--max-iterations", type=int, default=20,
@@ -62,13 +61,6 @@ def add_subparser(parser: argparse.ArgumentParser) -> None:
         "--no-run", action="store_true",
         help="Create the project then exit without running the CTO.",
     )
-
-
-def _resolve_api_key() -> Optional[str]:
-    for key in ("OMOIKANE_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"):
-        if os.environ.get(key):
-            return os.environ[key]
-    return None
 
 
 def run(args: argparse.Namespace) -> int:
@@ -105,19 +97,23 @@ def run(args: argparse.Namespace) -> int:
     if args.no_run:
         return 0
 
-    api_key = _resolve_api_key()
+    from omoikane.config import settings
+
+    cfg = settings.load_config()
+    api_key = settings.resolve_api_key(cfg)
     if not api_key:
         print(
             "No API key found. Set OMOIKANE_API_KEY / OPENROUTER_API_KEY / "
-            "ANTHROPIC_API_KEY and re-run with `omoikane resume <pid>`.",
+            "ANTHROPIC_API_KEY (or run `omoikane onboard`) and re-run with "
+            "`omoikane resume <pid>`.",
             file=sys.stderr,
         )
         return 0
 
     config = RunConfig(
-        model=args.model,
+        model=args.model or settings.resolve_model(cfg),
         api_key=api_key,
-        provider=args.provider,
+        provider=args.provider or settings.resolve_provider(cfg),
         max_iterations=args.max_iterations,
     )
 
