@@ -1,0 +1,4 @@
+# Local dev install — delegates to the `dev` extra in pyproject.toml.
+# Single source of truth stays pyproject; this is just a convenience shortcut.
+#   pip install -r requirements-dev.txt
+-e .[dev]
