@@ -61,6 +61,15 @@ def test_satisfy_criterion_rejects_non_integer_index(temp_hermes_home):
     assert "error" in res
 
 
+def test_create_tags_operator_criteria_and_seeds_completeness_fields(temp_hermes_home):
+    book = ProjectBook.create("brief", ["A", "B"])
+    data = book.load()
+    assert data["criteria_provenance"] == {"0": "operator_given", "1": "operator_given"}
+    assert data["completeness_passes"] == 0
+    assert data["completeness_clean"] is False
+    assert data["review_criteria"] is False
+
+
 def test_satisfy_criterion_logs_evidence(temp_hermes_home):
     book = ProjectBook.create("brief", ["A"])
     book_satisfy_criterion({

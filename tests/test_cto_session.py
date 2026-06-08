@@ -66,9 +66,12 @@ def _cfg() -> RunConfig:
 # ---------------------------------------------------------------------------
 # Completion gate
 # ---------------------------------------------------------------------------
-def test_completes_immediately_when_criteria_satisfied_and_no_open_tasks(
+def test_completes_after_a_clean_completeness_pass(
     temp_hermes_home, monkeypatch,
 ):
+    # Criteria satisfied + no open tasks does NOT finish immediately: the
+    # bounded completeness pass runs once. A no-op reviewer adds nothing →
+    # the pass is clean → the project completes on the next gate check.
     from omoikane.orchestrator import cto_session
 
     book = ProjectBook.create("brief", ["AC1"])
@@ -78,9 +81,12 @@ def test_completes_immediately_when_criteria_satisfied_and_no_open_tasks(
 
     iterations = cto_session.run_long_session(book.project_id, config=_cfg())
 
-    assert iterations == 0  # gate fires before any work
-    assert book.load()["status"] == "done"
-    assert _BaseFakeAgent.instances == []  # no agent was ever run
+    assert iterations == 1  # exactly one completeness pass, then done
+    assert len(_BaseFakeAgent.instances) == 1  # the completeness reviewer
+    data = book.load()
+    assert data["status"] == "done"
+    assert data["completeness_clean"] is True
+    assert data["completeness_passes"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +169,103 @@ def test_stop_requested_before_loop_returns_immediately(temp_hermes_home, monkey
 
     assert iterations == 0
     assert _BaseFakeAgent.instances == []
+
+
+# ---------------------------------------------------------------------------
+# Empty-criteria backstop: a brief-only project whose analyst never writes
+# criteria must fail loudly after one derivation retry, NOT spin the QA pass.
+# ---------------------------------------------------------------------------
+def test_empty_criteria_backstop_blocks_after_one_retry(temp_hermes_home, monkeypatch):
+    from omoikane.orchestrator import cto_session
+
+    book = ProjectBook.create("brief", [])  # no completion contract
+    book.update_status("in_progress")
+    _install_fake(monkeypatch, _BaseFakeAgent)  # never writes criteria
+
+    iterations = cto_session.run_long_session(
+        book.project_id, config=_cfg(), max_iterations=20,
+    )
+
+    data = book.load()
+    assert data["status"] == "failed"
+    assert data["derivation_retries"] >= 1
+    assert iterations < 10  # bounded — did not loop the QA pass against zero criteria
+
+
+# ---------------------------------------------------------------------------
+# Completeness loop: a pass that finds a gap appends a criterion; QA satisfies
+# it; the next pass is clean → done (loop-until-clean, bounded).
+# ---------------------------------------------------------------------------
+def test_completeness_loop_appends_gap_then_converges(temp_hermes_home, monkeypatch):
+    from omoikane.orchestrator import cto_session
+
+    book = ProjectBook.create("brief", ["AC1"])
+    book.satisfy_criterion(0)
+    book.update_status("in_progress")
+
+    class CompletenessFake(_BaseFakeAgent):
+        gaps_added = 0
+
+        def run_conversation(self, *, user_message, **kw):
+            result = super().run_conversation(user_message=user_message, **kw)
+            if "COMPLETENESS pass" in user_message:
+                if type(self).gaps_added == 0:
+                    type(self).gaps_added += 1
+                    book.set_criteria([
+                        {"text": "edge case covered", "provenance": "synthesized"},
+                    ])
+            elif "QA reviewer for project" in user_message:
+                d = book.load()
+                for i in range(len(d["acceptance_criteria"])):
+                    if d["criteria_status"].get(str(i)) != "satisfied":
+                        book.satisfy_criterion(i, evidence="verified")
+            return result
+
+    _install_fake(monkeypatch, CompletenessFake)
+    cto_session.run_long_session(book.project_id, config=_cfg(), max_iterations=20)
+
+    data = book.load()
+    assert data["status"] == "done"
+    assert data["completeness_clean"] is True
+    assert len(data["acceptance_criteria"]) == 2  # the gap was appended exactly once
+    assert CompletenessFake.gaps_added == 1
+
+
+# ---------------------------------------------------------------------------
+# Completeness cap: an over-eager reviewer that finds a "gap" every pass must
+# still terminate at the cap — bounded, never an infinite loop.
+# ---------------------------------------------------------------------------
+def test_completeness_cap_stops_unbounded_gap_finding(temp_hermes_home, monkeypatch):
+    from omoikane.orchestrator import cto_session
+
+    book = ProjectBook.create("brief", ["AC1"])
+    book.satisfy_criterion(0)
+    book.update_status("in_progress")
+
+    class NeverCleanFake(_BaseFakeAgent):
+        n = 0
+
+        def run_conversation(self, *, user_message, **kw):
+            result = super().run_conversation(user_message=user_message, **kw)
+            if "COMPLETENESS pass" in user_message:
+                type(self).n += 1
+                book.set_criteria([
+                    {"text": f"gap {type(self).n}", "provenance": "synthesized"},
+                ])
+            elif "QA reviewer for project" in user_message:
+                d = book.load()
+                for i in range(len(d["acceptance_criteria"])):
+                    if d["criteria_status"].get(str(i)) != "satisfied":
+                        book.satisfy_criterion(i, evidence="v")
+            return result
+
+    _install_fake(monkeypatch, NeverCleanFake)
+    cto_session.run_long_session(book.project_id, config=_cfg(), max_iterations=50)
+
+    data = book.load()
+    assert data["status"] == "done"
+    assert data["completeness_clean"] is False
+    assert data["completeness_passes"] == cto_session._COMPLETENESS_PASS_CAP
 
 
 def test_cancel_interrupts_the_live_agent(temp_hermes_home, monkeypatch):

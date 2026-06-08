@@ -19,9 +19,17 @@ def test_project_start_requires_brief(temp_hermes_home):
     assert "error" in result
 
 
-def test_project_start_requires_criteria(temp_hermes_home):
+def test_project_start_allows_missing_criteria(temp_hermes_home):
+    # Criteria are now optional — the analyst derives them from the brief.
     result = json.loads(project_start({"brief": "x"}))
-    assert "error" in result
+    assert "error" not in result
+    assert result["project_id"].startswith("proj-")
+
+    from omoikane.core.book import ProjectBook
+
+    data = ProjectBook(result["project_id"]).load()
+    assert data["acceptance_criteria"] == []
+    assert data["criteria_status"] == {}
 
 
 def test_project_status_tool(temp_hermes_home):

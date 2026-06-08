@@ -130,3 +130,20 @@ def test_load_backfills_roadmap_for_legacy_book(temp_hermes_home):
     book.store.book_path.write_text(json.dumps(raw))
     assert "roadmap" not in json.loads(book.store.book_path.read_text())
     assert book.load()["roadmap"] == []
+
+
+def test_load_backfills_brief_driven_fields_for_legacy_book(temp_hermes_home):
+    """Legacy books predate the criteria-derivation + completeness fields."""
+    book = ProjectBook.create("Brief", ["A"])
+    raw = json.loads(book.store.book_path.read_text())
+    for key in ("criteria_provenance", "completeness_passes",
+                "completeness_clean", "derivation_retries", "review_criteria"):
+        raw.pop(key, None)
+    book.store.book_path.write_text(json.dumps(raw))
+
+    data = book.load()
+    assert data["criteria_provenance"] == {}  # unknown for pre-existing criteria
+    assert data["completeness_passes"] == 0
+    assert data["completeness_clean"] is False
+    assert data["derivation_retries"] == 0
+    assert data["review_criteria"] is False

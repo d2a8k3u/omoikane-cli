@@ -16,7 +16,7 @@ def _import_sdk_registry():
     return sdk_registry
 
 
-def test_register_book_tools_loads_all_19_into_sdk():
+def test_register_book_tools_loads_all_20_into_sdk():
     sdk_registry = _import_sdk_registry()
 
     from omoikane.tools import (
@@ -32,7 +32,7 @@ def test_register_book_tools_loads_all_19_into_sdk():
     mapping = register_book_tools(override=True)
 
     assert is_registered()
-    assert len(mapping) == 19
+    assert len(mapping) == 20
 
     registered_names = sorted(mapping)
     sdk_names = sorted(
@@ -45,7 +45,7 @@ def test_register_book_tools_loads_all_19_into_sdk():
         "book_delegate", "book_record_result", "project_continue",
         "book_open_task", "book_complete_task", "book_add_artifact",
         "book_reflect", "book_request_task", "book_assign_task",
-        "book_satisfy_criterion", "book_set_roadmap",
+        "book_satisfy_criterion", "book_set_criteria", "book_set_roadmap",
         "prepare_manager_handoff", "book_request_approval",
         "book_resolve_approval", "book_request_split", "book_split_task",
     }

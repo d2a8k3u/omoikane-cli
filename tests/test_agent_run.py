@@ -119,8 +119,9 @@ def test_steer_buffers_to_inbox_before_agent_exists(temp_hermes_home, fake_sdk):
 def test_cto_session_terminates_on_done(temp_hermes_home, fake_sdk):
     from omoikane.orchestrator import cto_session
 
-    # Deterministic driver: the completion gate (all criteria satisfied AND no
-    # open tasks) ends the session before any agent runs.
+    # Deterministic driver: criteria satisfied + no open tasks triggers the
+    # bounded completeness pass; a no-op reviewer leaves it clean, so the
+    # session ends after that single pass.
     book = ProjectBook.create("brief", ["AC1"])
     book.satisfy_criterion(0)
     book.update_status("in_progress")
@@ -128,7 +129,7 @@ def test_cto_session_terminates_on_done(temp_hermes_home, fake_sdk):
     config = RunConfig(model="fake/model", api_key="dummy")
     iterations = cto_session.run_long_session(book.project_id, config=config)
 
-    assert iterations == 0
+    assert iterations == 1
     assert book.load()["status"] == "done"
 
 

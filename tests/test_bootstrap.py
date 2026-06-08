@@ -43,6 +43,9 @@ def test_bootstrap_analyst_task_shape(temp_hermes_home):
     assert meta["phase"] == "analysis"
     assert meta["routing_status"] == "assigned"
     assert not meta.get("blocked_by")
+    # The analyst now owns deriving the completion contract from the brief.
+    title = meta["title"].lower()
+    assert "derive" in title and "acceptance criteria" in title
 
 
 def test_bootstrap_architect_task_shape(temp_hermes_home):
