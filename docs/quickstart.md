@@ -6,19 +6,24 @@ omoikane reads the LLM API key from the environment (first match wins):
 
 ```sh
 export OMOIKANE_API_KEY=...        # or OPENROUTER_API_KEY / ANTHROPIC_API_KEY
-export OMOIKANE_MODEL=...          # optional; defaults to a built-in model
+export OMOIKANE_MODEL=...          # optional; defaults to openrouter/owl-alpha
 export OMOIKANE_PROVIDER=...       # optional; e.g. openrouter
 ```
 
 ## 2. Describe the project
 
-Write a brief and acceptance criteria:
+A brief is all you have to write. Acceptance criteria are optional: the product
+analyst derives them from the brief when you don't supply any.
 
 ```sh
 cat > brief.md <<'EOF'
 Build a small CLI that converts Markdown files to HTML.
 EOF
+```
 
+To pin the criteria yourself, write a criteria file and pass it with `-c`:
+
+```sh
 cat > criteria.json <<'EOF'
 ["converts a .md file to .html", "has a --help flag", "has tests"]
 EOF
@@ -29,11 +34,14 @@ The criteria file accepts a JSON array, a YAML list, or one item per line.
 ## 3. Start the team
 
 ```sh
-omoikane start -b brief.md -c criteria.json --detach
+omoikane start -b brief.md --detach                    # analyst derives the criteria
+omoikane start -b brief.md -c criteria.json --detach   # or supply your own
 ```
 
 - `--detach` runs the CTO as a background daemon (default for unattended runs).
 - `--foreground` runs it attached to your terminal.
+- `--review-criteria` pauses once after the analyst derives the criteria, before
+  the build commits, so you can inspect them. Resume with `omoikane resume <pid>`.
 - `--no-run` just creates the project on disk without starting the CTO.
 
 ## 4. Watch and steer

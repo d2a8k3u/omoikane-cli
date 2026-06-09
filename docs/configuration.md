@@ -5,8 +5,8 @@
 | Variable | Purpose |
 |---|---|
 | `OMOIKANE_API_KEY` | LLM API key. Falls back to `OPENROUTER_API_KEY`, then `ANTHROPIC_API_KEY`. |
-| `OMOIKANE_MODEL` | Default model id. |
-| `OMOIKANE_PROVIDER` | Default provider (e.g. `openrouter`). |
+| `OMOIKANE_MODEL` | Model id (built-in default `openrouter/owl-alpha`). |
+| `OMOIKANE_PROVIDER` | Provider (built-in default `openrouter`). |
 | `OMOIKANE_HOME` | Override the home directory (default `~/.omoikane`). |
 | `OMOIKANE_NO_UPDATE_CHECK` | Set to disable the startup "new version" nag. |
 
@@ -33,27 +33,32 @@
 
 ## `config.toml`
 
-Global settings live in `~/.omoikane/config.toml`. Sections that are read:
+Global settings live in `~/.omoikane/config.toml`; `omoikane onboard` writes it
+for you. Only these sections are read:
 
 ```toml
-[runtime]
-# model / iteration defaults
+[auth]
+api_key = "env:OPENROUTER_API_KEY"   # a literal key, or "env:VAR" to read $VAR
 
-[orchestrator]
-# CTO loop behaviour
-
-[supervisor]
-# health-check thresholds, respawn policy
-
-[role_toolsets]
-# per-role toolset overrides, e.g.:
-"agent-backend-engineer" = ["file", "terminal", "browser", "omoikane"]
+[model]
+id       = "openrouter/owl-alpha"
+provider = "openrouter"
 
 [transport]
-# approval notification backends (slack / telegram)
+backends = ["stdout"]                 # add "telegram" / "slack" to enable them
 
-[origin]
-# audit origin tagging
+[transport.telegram]
+bot_token = "env:TELEGRAM_BOT_TOKEN"
+chat_id   = "-100123456789"
+
+[transport.slack]
+webhook_url = "env:SLACK_WEBHOOK_URL"
+
+[supervisor]
+schedule = "*/5 * * * *"              # cron entry written by `supervisor install`
 ```
 
-Missing sections and a missing file are both fine — defaults apply.
+Values resolve CLI flag > environment variable > `config.toml` > built-in default.
+A missing file or missing section is fine; defaults apply. Supervisor stall and
+respawn thresholds are fixed in code, so `schedule` is the only `[supervisor]` key
+read from config.
