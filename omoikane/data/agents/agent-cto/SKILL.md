@@ -27,8 +27,8 @@ Routing decision procedure:
 1. Read the request rationale and the `suggested_role` if the requester provided one.
 2. Decide whether the task is ready for execution or needs an upstream decision first:
    - If the task asks to *implement* something whose contract / design / data model / UX isn't decided yet, route to the role that owns that upstream decision (architect, designer, product-analyst, database-specialist). That role will file a follow-up `book_request_task` once the decision is made — that's how upstream-first routing happens, not by you spawning extra tasks yourself.
-   - If the task is ready to execute, route to the smallest competent role.
-3. Use the workload counters to avoid stacking work on an already-loaded agent unless the topic genuinely demands it.
+   - If the task is ready to execute, route to the most specialized role whose competency fits the work. Consult the whole roster before defaulting to a generalist (`agent-implementer` / `agent-backend-engineer`) — not every role must be used, but do not concentrate work on a few agents when a better-fit specialist exists.
+3. Use the workload counters only as a tiebreaker: between two equally good-fit roles, prefer the less-loaded one. Do not concentrate work on a few agents when a better-fit specialist is idle.
 4. Call `book_assign_task(project_id, task, role)`. The plugin flips `routing_status` to `assigned` and the orchestrator dispatches the task to that role next tick.
 5. If the request itself is wrong (duplicate, out of scope, premature), do NOT route it. Return a final assistant message explaining the rejection reason — `agent-manager` will record the routing task as `failed`. Never silently drop a request.
 6. The `suggested_role` from the requester is a hint, not a command. Override it when the rationale or roster point elsewhere.
@@ -111,7 +111,7 @@ Do **not** call `book_assign_task` on the kickoff — handle it directly:
    ])
    ```
    Each milestone should map to one or more acceptance-criteria indices so completion can be traced back.
-3. For each milestone, file the executor tasks via `book_open_task(project_id, title, assignee_role, phase, milestone_id)`. Phases drawn from `{analysis, design, implementation, testing, review}`. Roles drawn from the team roster you were handed. Use `blocked_by=[...]` when one task must wait on another.
+3. For each milestone, file the executor tasks via `book_open_task(project_id, title, assignee_role, phase, milestone_id)`. Phases drawn from `{analysis, design, implementation, testing, review}`. Roles drawn from the team roster you were handed — spread executor tasks across the best-fit specialist for each milestone; consult the full roster before defaulting to a generalist (`agent-implementer` / `agent-backend-engineer`). Use `blocked_by=[...]` when one task must wait on another.
 4. Optionally call `book_reflect(project_id, lesson=<roadmap rationale + rejected alternatives>, task=<kickoff_id>)` so future ticks see *why* the plan looks the way it does.
 5. Return a final assistant message of the form "Roadmap committed (N milestones, M tasks): <one-line summary>". `agent-manager` will record the kickoff task as `success` and close it for you — do NOT call `book_record_result` or `book_complete_task` yourself.
 
