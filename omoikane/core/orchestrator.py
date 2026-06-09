@@ -33,38 +33,22 @@ See ``agents/orchestrator-protocol/SKILL.md``.
 
 from __future__ import annotations
 
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from .agents_registry import get_registry, render_team_roster
 from .book import DEFAULT_COMPLETENESS_PASS_CAP, ProjectBook
-from .agents_registry import get_registry
 from .execution import choose_execution_mode
-
-
-# Match the `description:` line in a SKILL.md frontmatter so the CTO roster
-# stays in sync with each role's actual prompt — no separate metadata file.
-_DESC_RE = re.compile(r"^description:\s*(.+?)\s*$", re.MULTILINE)
-
-
-def _role_description(skill_md: str) -> str:
-    """Extract the one-line role description from a SKILL.md frontmatter."""
-    if not skill_md:
-        return ""
-    m = _DESC_RE.search(skill_md)
-    return m.group(1).strip() if m else ""
-
 
 # Ordered phases — used both for computing the current phase from the open
 # task set and for tagging tasks the orchestrator files itself. The bootstrap
 # no longer seeds one fixed task per phase; the CTO files executor tasks
 # dynamically after the analyst + architect kickoff round.
-_PHASE_ORDER: List[str] = ["analysis", "design", "implementation",
-                            "testing", "review"]
+_PHASE_ORDER: list[str] = ["analysis", "design", "implementation", "testing", "review"]
 
 # Sensible default toolsets per role. Every role gets the ``omoikane``
 # toolset by default so sub-agents can surface work via
 # ``book_request_task`` without the operator having to wire it explicitly.
-_BASE_TOOLSETS: Dict[str, List[str]] = {
+_BASE_TOOLSETS: dict[str, list[str]] = {
     "agent-product-analyst": ["file", "web"],
     "agent-architekt": ["file", "web"],
     "agent-designer": ["file", "web"],
@@ -83,7 +67,7 @@ _BASE_TOOLSETS: Dict[str, List[str]] = {
 }
 
 
-def _toolsets_for(role: str) -> List[str]:
+def _toolsets_for(role: str) -> list[str]:
     base = list(_BASE_TOOLSETS.get(role, ["file", "terminal"]))
     if "omoikane" not in base:
         base.append("omoikane")
@@ -100,7 +84,7 @@ class TeamOrchestrator:
 
     # === Public entry point ===
 
-    def run_once(self, ctx: Optional[Any] = None) -> Dict[str, Any]:
+    def run_once(self, ctx: Any | None = None) -> dict[str, Any]:
         """Advance the project by exactly one orchestration step.
 
         ``ctx`` is accepted for API compatibility and is *ignored*. The plugin
@@ -127,7 +111,7 @@ class TeamOrchestrator:
             }
 
         data = self.book.load()  # refresh after potential mutation above
-        open_tasks: List[str] = list(data.get("open_tasks", []))
+        open_tasks: list[str] = list(data.get("open_tasks", []))
 
         # A project is complete only when EVERY acceptance criterion is
         # satisfied, no tasks remain open, AND the bounded completeness review
@@ -146,6 +130,7 @@ class TeamOrchestrator:
             # supervisor's own teardown path covers this too.
             try:
                 from .project_cron import remove_project_cron
+
                 remove_project_cron(self.project_id)
             except Exception:
                 pass
@@ -200,7 +185,7 @@ class TeamOrchestrator:
 
     # === Internal helpers ===
 
-    def _bootstrap(self, data: Dict[str, Any]):
+    def _bootstrap(self, data: dict[str, Any]):
         """Seed the project with the minimum viable planning round.
 
         Three tasks are filed instead of the legacy fixed-phase decomposition:
@@ -217,10 +202,14 @@ class TeamOrchestrator:
         """
         team = set(self.registry.list_routable_roles())
 
-        analyst_role = ("agent-product-analyst" if "agent-product-analyst" in team
-                        else "agent-implementer")
-        architect_role = ("agent-architekt" if "agent-architekt" in team
-                          else "agent-implementer")
+        analyst_role = (
+            "agent-product-analyst"
+            if "agent-product-analyst" in team
+            else "agent-implementer"
+        )
+        architect_role = (
+            "agent-architekt" if "agent-architekt" in team else "agent-implementer"
+        )
 
         analyst_id = self.book.open_task(
             title="Derive and extract acceptance criteria from the brief, then refine into checkable user stories",
@@ -235,7 +224,10 @@ class TeamOrchestrator:
 
         brief = (data.get("brief") or "").strip()
         criteria = data.get("acceptance_criteria", [])
-        criteria_block = "\n".join(f"  [{i}] {ac}" for i, ac in enumerate(criteria)) or "  (none recorded)"
+        criteria_block = (
+            "\n".join(f"  [{i}] {ac}" for i, ac in enumerate(criteria))
+            or "  (none recorded)"
+        )
         rationale = (
             "Project kickoff. The analyst and architect tasks above are "
             "running first; once both close, you will be dispatched here with "
@@ -289,7 +281,7 @@ class TeamOrchestrator:
             },
         )
 
-    def _auto_decompose(self, data: Dict[str, Any]) -> Optional[str]:
+    def _auto_decompose(self, data: dict[str, Any]) -> str | None:
         """File a CTO routing task to break a no-open-tasks deadlock.
 
         Three states, in priority order:
@@ -362,7 +354,7 @@ class TeamOrchestrator:
 
         return None
 
-    def _is_blocked(self, task_id: str, data: Dict[str, Any]) -> bool:
+    def _is_blocked(self, task_id: str, data: dict[str, Any]) -> bool:
         """A task is blocked while any id in its ``blocked_by`` remains open."""
         meta = data.get("task_meta", {}).get(task_id, {})
         blocked_by = meta.get("blocked_by") or []
@@ -371,7 +363,7 @@ class TeamOrchestrator:
         open_set = set(data.get("open_tasks", []))
         return any(bid in open_set for bid in blocked_by)
 
-    def _is_split_pending(self, task_id: str, data: Dict[str, Any]) -> bool:
+    def _is_split_pending(self, task_id: str, data: dict[str, Any]) -> bool:
         """A task is paused while it carries an unresolved split request.
 
         The picker skips it so the orchestrator does NOT re-dispatch the
@@ -381,8 +373,7 @@ class TeamOrchestrator:
         meta = data.get("task_meta", {}).get(task_id, {})
         return meta.get("split_status") == "requested"
 
-    def _pick_next_task(self, data: Dict[str, Any],
-                        open_tasks: List[str]) -> str:
+    def _pick_next_task(self, data: dict[str, Any], open_tasks: list[str]) -> str:
         """Routing-first task selection over unblocked tasks. FIFO fallback.
 
         Tasks are skipped when:
@@ -398,9 +389,9 @@ class TeamOrchestrator:
         """
         meta = data.get("task_meta", {})
         eligible = [
-            tid for tid in open_tasks
-            if not self._is_blocked(tid, data)
-            and not self._is_split_pending(tid, data)
+            tid
+            for tid in open_tasks
+            if not self._is_blocked(tid, data) and not self._is_split_pending(tid, data)
         ]
 
         for task_id in eligible:
@@ -414,7 +405,7 @@ class TeamOrchestrator:
         # task so the operator can see what is stuck.
         return open_tasks[0]
 
-    def _advance_phase(self, data: Dict[str, Any]) -> None:
+    def _advance_phase(self, data: dict[str, Any]) -> None:
         """Recompute and persist ``current_phase`` from the open task set.
 
         Phase = the earliest (most upstream) phase that still has open work.
@@ -453,7 +444,7 @@ class TeamOrchestrator:
             self.book.set_phase("meta")
             return
 
-    def _plan_delegation(self, task_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _plan_delegation(self, task_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Record the delegation in the Book and build the payload the LLM
         will pass to Hermes' native ``delegate_task`` tool."""
         meta = data.get("task_meta", {}).get(task_id, {})
@@ -500,10 +491,13 @@ class TeamOrchestrator:
         # Build a self-contained context block so the subagent starts cold
         # but informed (delegate_task subagents share zero history with the
         # parent — see Hermes' delegation docs).
-        criteria_lines = "\n".join(
-            f"  - [{'x' if data.get('criteria_status', {}).get(str(i)) == 'satisfied' else ' '}] {ac}"
-            for i, ac in enumerate(data.get("acceptance_criteria", []))
-        ) or "  (none recorded)"
+        criteria_lines = (
+            "\n".join(
+                f"  - [{'x' if data.get('criteria_status', {}).get(str(i)) == 'satisfied' else ' '}] {ac}"
+                for i, ac in enumerate(data.get("acceptance_criteria", []))
+            )
+            or "  (none recorded)"
+        )
 
         is_kickoff = (
             routing
@@ -560,10 +554,15 @@ class TeamOrchestrator:
                 "written (architecture, contracts, UX, data model), route to "
                 "the role that owns that decision — they will file follow-up "
                 "requests via book_request_task when ready for the next stage.\n"
-                "- Prefer the smallest competent role. Do not stack work on "
-                "agents already heavily loaded unless the topic demands it.\n"
+                "- Match each task to the MOST SPECIALIZED role whose "
+                "competency fits. Consult the whole roster before defaulting to "
+                "a generalist (agent-implementer / agent-backend-engineer). Not "
+                "every role must be used, but do not concentrate work on a few "
+                "agents when a better-fit specialist exists.\n"
+                "- Use the workload counters only as a tiebreaker: between two "
+                "equally good-fit roles, prefer the less-loaded one.\n"
                 "- The suggested_role is a hint, not a command. Override it "
-                "freely when the rationale points elsewhere.\n"
+                "freely when the rationale or roster point elsewhere.\n"
                 f"{kickoff_section}"
             )
 
@@ -576,7 +575,25 @@ class TeamOrchestrator:
         specialist_state_block = ""
         if role != "agent-cto" and not routing:
             specialist_state_block = self._specialist_state_block(
-                data, role=role, milestone_id=meta.get("milestone_id"),
+                data,
+                role=role,
+                milestone_id=meta.get("milestone_id"),
+            )
+
+        # The team roster a non-routing specialist consults when it must name a
+        # suggested_role (escalation or split). Rendered once into its own block
+        # that precedes both the size and escalation blocks; each references it
+        # rather than repeating the listing. exclude=None: a specialist may
+        # legitimately suggest its own role; the CTO makes the final routing call.
+        roster_block = ""
+        if not routing:
+            roster = render_team_roster(data, registry=self.registry, exclude=None)
+            roster_block = (
+                "\n=== Team roster ===\n"
+                "When you must name a suggested_role (escalation or split below), "
+                "pick the most specialized role whose competency matches — the "
+                "CTO makes the final routing call:\n"
+                f"{roster}\n"
             )
 
         # Universal escalation: any executor can hand a found problem to CTO,
@@ -594,6 +611,9 @@ class TeamOrchestrator:
                 "title=<the problem>, rationale=<why it must be fixed before "
                 f"done>, requester_role='{role}', suggested_role=<who fixes "
                 "it>)\n"
+                "Pick suggested_role as the most specialized role whose "
+                "competency matches the problem (see the Team roster above) — "
+                "the CTO makes the final routing call.\n"
                 "The CTO routes it and, if it changes what 'done' means, folds "
                 "it into the roadmap and acceptance criteria. It blocks "
                 "completion until resolved.\n"
@@ -608,7 +628,8 @@ class TeamOrchestrator:
             est = (meta.get("execution_metadata") or {}).get("estimated_minutes")
             est_line = (
                 f"Estimated minutes for this task (set by the filer): {est}.\n"
-                if est is not None else ""
+                if est is not None
+                else ""
             )
             size_block = (
                 "\n=== Self-monitor for task size ===\n"
@@ -628,6 +649,9 @@ class TeamOrchestrator:
                 "      ...\n"
                 "    ],\n"
                 "  )\n"
+                "Set each suggested_role to the most specialized role whose "
+                "competency fits that subtask (see the Team roster above) — the "
+                "CTO makes the final routing call.\n"
                 "Then return your summary. The plugin pauses this task so "
                 "the orchestrator does NOT re-dispatch it; CTO files the "
                 "replacement children on the next tick. Filing a split "
@@ -646,6 +670,7 @@ class TeamOrchestrator:
             f"Task id:    {task_id}\n"
             f"Title:      {title}\n"
             f"Expected:   {expected}\n"
+            f"{roster_block}"
             f"{size_block}"
             f"{escalation_block}\n"
             f"=== Your role's SKILL.md ===\n{skill_content.strip() or '(empty)'}"
@@ -664,7 +689,7 @@ class TeamOrchestrator:
             "expected": expected,
         }
 
-    def _collect_reflections_by_task(self) -> Dict[str, str]:
+    def _collect_reflections_by_task(self) -> dict[str, str]:
         """Map task id → newest reflection ref (relative to the project dir).
 
         Two paths produce reflections — both are surfaced, newest wins:
@@ -676,7 +701,7 @@ class TeamOrchestrator:
         Best-effort: never raise — a missing tree or directory just yields
         fewer entries, never a failed dispatch.
         """
-        refl_by_task: Dict[str, str] = {}
+        refl_by_task: dict[str, str] = {}
         # 1. Edges in the delegation tree (book_record_result path).
         try:
             tree = self.book.store._load_delegation()
@@ -685,7 +710,7 @@ class TeamOrchestrator:
                 node_id = edge.get("to") or ""
                 if not ref or not node_id.startswith("n-"):
                     continue
-                refl_by_task[node_id[len("n-"):]] = ref
+                refl_by_task[node_id[len("n-") :]] = ref
         except Exception:
             pass
 
@@ -711,10 +736,10 @@ class TeamOrchestrator:
 
     def _specialist_state_block(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         role: str,
-        milestone_id: Optional[str],
+        milestone_id: str | None,
         max_reflections: int = 4,
     ) -> str:
         """Upstream-decision context for a non-CTO executor (cooperation).
@@ -739,16 +764,23 @@ class TeamOrchestrator:
         milestone_section = ""
         if milestone_id:
             milestone = next(
-                (m for m in (data.get("roadmap") or [])
-                 if m.get("milestone_id") == milestone_id),
+                (
+                    m
+                    for m in (data.get("roadmap") or [])
+                    if m.get("milestone_id") == milestone_id
+                ),
                 None,
             )
             if milestone:
                 idxs = milestone.get("criteria_indices") or []
-                crit_lines = "\n".join(
-                    f"      - [{i}] {criteria[i]}"
-                    for i in idxs if 0 <= i < len(criteria)
-                ) or "      (no criteria mapped)"
+                crit_lines = (
+                    "\n".join(
+                        f"      - [{i}] {criteria[i]}"
+                        for i in idxs
+                        if 0 <= i < len(criteria)
+                    )
+                    or "      (no criteria mapped)"
+                )
                 desc = (milestone.get("description") or "").strip()
                 milestone_section = (
                     f"\n=== Your milestone ===\n"
@@ -762,16 +794,17 @@ class TeamOrchestrator:
         # 2. Relevant reflections: same-milestone completed tasks first, then
         #    newest-N (completed_tasks is append-order, so reversed == newest).
         same_ms = [
-            tid for tid in completed
+            tid
+            for tid in completed
             if meta.get(tid, {}).get("milestone_id") == milestone_id
             and milestone_id is not None
             and tid in refl_by_task
         ]
-        ordered: List[str] = list(same_ms)
+        ordered: list[str] = list(same_ms)
         for tid in reversed(completed):
             if tid in refl_by_task and tid not in ordered:
                 ordered.append(tid)
-        refl_lines: List[str] = []
+        refl_lines: list[str] = []
         for tid in ordered[:max_reflections]:
             tmeta = meta.get(tid, {})
             assignee = tmeta.get("assignee_role") or "?"
@@ -780,8 +813,11 @@ class TeamOrchestrator:
             refl_lines.append(f"  - {tid} [{assignee}] {title} — {abs_path}")
         refl_section = (
             "\n=== Upstream decisions (read these before you start) ===\n"
-            + ("\n".join(refl_lines) if refl_lines
-               else "  (no upstream decisions recorded yet)")
+            + (
+                "\n".join(refl_lines)
+                if refl_lines
+                else "  (no upstream decisions recorded yet)"
+            )
             + "\n"
         )
 
@@ -793,13 +829,11 @@ class TeamOrchestrator:
                 f"  - {a.get('kind', '?')}: {project_dir / a.get('path', '')}"
                 for a in artifacts[-max_reflections:]
             ]
-            art_section = (
-                "\n=== Recent artifacts ===\n" + "\n".join(art_lines) + "\n"
-            )
+            art_section = "\n=== Recent artifacts ===\n" + "\n".join(art_lines) + "\n"
 
         return milestone_section + refl_section + art_section
 
-    def _cto_state_block(self, data: Dict[str, Any]) -> str:
+    def _cto_state_block(self, data: dict[str, Any]) -> str:
         """CTO-only context: completed work + reflections + current roadmap.
 
         Lets CTO synthesise the kickoff (and any later re-planning) without
@@ -822,7 +856,7 @@ class TeamOrchestrator:
 
         refl_by_task = self._collect_reflections_by_task()
 
-        lines: List[str] = []
+        lines: list[str] = []
         for tid in completed:
             tmeta = meta.get(tid, {})
             title = tmeta.get("title", tid)
@@ -843,7 +877,7 @@ class TeamOrchestrator:
 
         roadmap = data.get("roadmap") or []
         if roadmap:
-            rl: List[str] = []
+            rl: list[str] = []
             for m in roadmap:
                 indices = ", ".join(str(i) for i in (m.get("criteria_indices") or []))
                 rl.append(
@@ -851,9 +885,7 @@ class TeamOrchestrator:
                     f"[status={m.get('status', 'planned')}] "
                     f"(criteria: {indices or 'unbound'})"
                 )
-            roadmap_section = (
-                "\n=== Committed roadmap ===\n" + "\n".join(rl) + "\n"
-            )
+            roadmap_section = "\n=== Committed roadmap ===\n" + "\n".join(rl) + "\n"
         else:
             roadmap_section = (
                 "\n=== Committed roadmap ===\n  (empty — set via "
@@ -862,43 +894,14 @@ class TeamOrchestrator:
 
         return completed_section + roadmap_section
 
-    def _team_roster(self, data: Dict[str, Any], exclude: Optional[str] = None) -> str:
-        """Render the team roster CTO sees when routing.
+    def _team_roster(self, data: dict[str, Any], exclude: str | None = None) -> str:
+        """Render the team roster every role-picker sees.
 
-        Each line is ``- agent-<role>: <description> (open: N, done: M)``.
-        Workload counts come from task_meta so CTO can avoid stacking work
-        on already-loaded agents. ``exclude`` skips one role from the
-        listing (typically CTO itself).
+        Thin wrapper over :func:`render_team_roster` (the single source of
+        truth, shared with the ``runtime.prompts`` directives). ``exclude``
+        skips one role from the listing (the CTO router drops itself).
         """
-        meta = data.get("task_meta", {})
-        open_set = set(data.get("open_tasks", []))
-        done_set = set(data.get("completed_tasks", []))
-
-        open_load: Dict[str, int] = {}
-        done_load: Dict[str, int] = {}
-        for task_id, t_meta in meta.items():
-            assignee = t_meta.get("assignee_role")
-            if not assignee:
-                continue
-            if task_id in open_set:
-                open_load[assignee] = open_load.get(assignee, 0) + 1
-            elif task_id in done_set:
-                done_load[assignee] = done_load.get(assignee, 0) + 1
-
-        roles = sorted(self.registry.list_routable_roles())
-        lines: List[str] = []
-        for role in roles:
-            if role == exclude:
-                continue
-            if role == "orchestrator-protocol":
-                continue  # not an assignable executor
-            desc = _role_description(self.registry.get_skill_content(role) or "")
-            open_n = open_load.get(role, 0)
-            done_n = done_load.get(role, 0)
-            lines.append(
-                f"- {role}: {desc} (open: {open_n}, done: {done_n})"
-            )
-        return "\n".join(lines) if lines else "(no other roles available)"
+        return render_team_roster(data, registry=self.registry, exclude=exclude)
 
     def _pick_role(self, title: str) -> str:
         """Heuristic role assignment when task meta does not specify one."""

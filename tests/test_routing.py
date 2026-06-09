@@ -160,3 +160,65 @@ def test_cto_routing_context_carries_team_roster_and_workload(temp_hermes_home):
     assert "Routing guidance" in ctx
     # CTO must not appear in its own roster.
     assert ctx.count("agent-cto:") == 0
+
+
+def test_routing_guidance_pushes_best_fit_not_smallest(temp_hermes_home):
+    """The routing instruction is the actual lever against over-concentration:
+    it must tell the CTO to pick the most specialized role, not the smallest."""
+    book = ProjectBook.create("brief", ["AC"])
+    orch = TeamOrchestrator(book.project_id)
+    orch.run_once()  # bootstrap
+
+    book_request_task({
+        "project_id": book.project_id,
+        "title": "Decide auth approach",
+        "rationale": "Implementer needs an upstream decision",
+        "requester_role": "agent-implementer",
+    })
+    ctx = orch.run_once()["next_delegation"]["context"]
+    assert "most specialized" in ctx.lower()
+    assert "smallest competent" not in ctx.lower()
+
+
+def test_non_routing_executor_dispatch_carries_roster(temp_hermes_home):
+    """A specialist that escalates or splits must suggest a role from the whole
+    team — both the escalation and the size/split blocks carry the roster."""
+    book = ProjectBook.create("brief", ["AC"])
+    orch = TeamOrchestrator(book.project_id)
+    orch.run_once()  # bootstrap
+
+    # Clear the bootstrap queue so the routed task is the unambiguous next pick.
+    data = book.load()
+    data["open_tasks"] = []
+    book.store.save_book(data)
+
+    req = json.loads(book_request_task({
+        "project_id": book.project_id,
+        "title": "Audit secrets in config",
+        "rationale": "Implementer found unmasked tokens in config.yaml",
+        "requester_role": "agent-implementer",
+    }))
+    task_id = req["task"]
+
+    orch.run_once()  # CTO sees the routing task
+    book_assign_task({
+        "project_id": book.project_id,
+        "task": task_id,
+        "role": "agent-security-engineer",
+    })
+
+    nd = orch.run_once()["next_delegation"]
+    assert nd["to_role"] == "agent-security-engineer"
+    assert nd["routing"] is False
+    ctx = nd["context"]
+
+    # Escalation block carries the roster so suggested_role spans the team.
+    assert "=== Escalation ===" in ctx
+    # Size/split block carries it too.
+    assert "=== Self-monitor for task size ===" in ctx
+    # A roster line for a role other than the assignee proves the full team is
+    # surfaced (exclude=None — a specialist may even suggest its own role).
+    assert "- agent-database-specialist:" in ctx
+    # Non-routable roles never appear as a suggestable target.
+    assert "- agent-manager:" not in ctx
+    assert "- orchestrator-protocol:" not in ctx
