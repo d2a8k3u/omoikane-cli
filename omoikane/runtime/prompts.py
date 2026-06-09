@@ -19,7 +19,7 @@ import textwrap
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from omoikane.config import paths
-from omoikane.core.agents_registry import get_registry
+from omoikane.core.agents_registry import get_registry, render_team_roster
 
 INJECT_START = "=== OPERATOR STEER ==="
 INJECT_END = "=== END OPERATOR STEER ==="
@@ -192,6 +192,7 @@ def build_qa_directive(project_id: str, book: Mapping[str, Any]) -> str:
     ]
     pending_block = "\n".join(pending) or "  (none)"
     path_hint = _project_path_hint(project_id)
+    roster = render_team_roster(book)
     return (
         f"You are the QA reviewer for project {project_id}. The team has been "
         "building in the current working directory. Verify the project against "
@@ -199,12 +200,15 @@ def build_qa_directive(project_id: str, book: Mapping[str, Any]) -> str:
         "possible, running the actual files (use your file / terminal tools).\n\n"
         f"Project brief:\n{(book.get('brief') or '').strip()}\n\n"
         f"Unsatisfied acceptance criteria:\n{pending_block}\n\n"
+        f"Team roster (pick the best-fit suggested_role per fix):\n{roster}\n\n"
         "For EACH criterion:\n"
         "  - If it genuinely passes, call book_satisfy_criterion(project_id, "
         "index=<the number above>, evidence=<what you checked / command output>).\n"
-        "  - If it fails or is missing, call book_open_task(project_id, "
-        "title=<concrete fix>, assignee_role=<role>, phase='implementation') so "
-        "the team can address it.\n"
+        "  - If it fails or is missing, file the fix through the CTO via "
+        "book_request_task(project_id, title=<concrete fix>, rationale=<why it "
+        "fails>, requester_role='agent-qa-reviewer', suggested_role=<the most "
+        "specialized role from the roster whose competency matches the fix>) so "
+        "the CTO routes AND sizes it.\n"
         "Do NOT satisfy a criterion you could not actually verify. "
         f"The Project Book lives at {path_hint}. When done, stop with a short "
         "summary of what passed and what you filed."
@@ -222,6 +226,7 @@ def build_completeness_directive(project_id: str, book: Mapping[str, Any]) -> st
     criteria = book.get("acceptance_criteria") or []
     criteria_block = "\n".join(f"  ({i}) {c}" for i, c in enumerate(criteria)) or "  (none)"
     path_hint = _project_path_hint(project_id)
+    roster = render_team_roster(book)
     return (
         f"You are the QA reviewer running a COMPLETENESS pass for project "
         f"{project_id}. Every listed acceptance criterion is already satisfied "
@@ -229,6 +234,7 @@ def build_completeness_directive(project_id: str, book: Mapping[str, Any]) -> st
         "through to its consequences', not just literally compliant.\n\n"
         f"Project brief:\n{(book.get('brief') or '').strip()}\n\n"
         f"Satisfied acceptance criteria:\n{criteria_block}\n\n"
+        f"Team roster (pick the best-fit suggested_role for any fix):\n{roster}\n\n"
         "Compare the brief's INTENT against the criteria above. Look for "
         "implied-but-unstated features, unhandled edge cases, error/empty/"
         "failure paths, security or data-integrity consequences, and anything a "
@@ -238,8 +244,9 @@ def build_completeness_directive(project_id: str, book: Mapping[str, Any]) -> st
         "criteria via book_set_criteria(project_id, criteria=[{text, "
         "provenance='synthesized'}, ...]), and file the build work via "
         "book_request_task(project_id, title=<fix>, rationale=<why>, "
-        "requester_role='agent-qa-reviewer', suggested_role=<role>) so the CTO "
-        "routes AND sizes it — do not open the build task directly (that "
+        "requester_role='agent-qa-reviewer', suggested_role=<the most "
+        "specialized role from the roster whose competency matches>) so the CTO "
+        "routes AND sizes it — do not file the build task directly (that "
         "bypasses sizing).\n"
         "  - If the brief's intent is already fully covered, append nothing and "
         "say so plainly.\n\n"
