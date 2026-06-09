@@ -3,12 +3,16 @@
 Standalone CLI/TUI orchestrator for autonomous agent teams, built on the
 [hermes-agent](https://hermes-agent.nousresearch.com) Python SDK.
 
-You hand Omoikane a project brief and acceptance criteria. A long-lived CTO
-agent decomposes the work, delegates specialists via `delegate_task`, validates
-each result, and loops until every criterion is satisfied. Every decision,
-delegation, tool call, and result is appended to a per-project Activity Book
-on disk, and an operator-attached TUI streams the work as it happens — with a
-slash-prefixed input bar that injects new context into the running CTO without
+You hand Omoikane a project brief. Acceptance criteria are optional: supply your
+own, or let the product analyst derive them from the brief. A long-lived CTO
+agent then decomposes the work, delegates specialists via `delegate_task`, and
+verifies each result against the criteria. Once everything passes, a completeness
+check looks for anything the brief implied but the criteria missed; the run keeps
+going until that comes back clean.
+
+Every decision, delegation, tool call, and result is appended to a per-project
+Activity Book on disk. An operator-attached TUI streams the work as it happens,
+and its slash-prefixed input bar injects new context into the running CTO without
 killing the loop.
 
 ## Status
@@ -71,16 +75,19 @@ textual, or httpx into their environment:
 ```bash
 export OPENROUTER_API_KEY="sk-or-..."
 
-# Bootstrap + run the CTO attached to this terminal.
+# A brief is enough to start; the analyst derives the criteria.
 echo "Build a CLI greeter in Python" > /tmp/brief.md
+omoikane start --brief /tmp/brief.md --foreground
+
+# Supply your own acceptance criteria instead of deriving them:
 cat > /tmp/criteria.txt <<EOF
 Prints "Hello, world!"
 Has a --name flag overriding the greeting
 EOF
-omoikane start --brief /tmp/brief.md --criteria /tmp/criteria.txt --foreground
-
-# Or run it detached and watch it in the TUI:
 omoikane start --brief /tmp/brief.md --criteria /tmp/criteria.txt --detach
+
+# Pause to review the derived criteria before the build commits, then resume:
+omoikane start --brief /tmp/brief.md --review-criteria --detach
 omoikane open <project_id>
 
 # Inject context into the running CTO without leaving the TUI:
@@ -92,7 +99,7 @@ omoikane open <project_id>
 ## Subcommand surface
 
 ```
-omoikane start             create + run a project (--foreground / --detach / --no-run)
+omoikane start             create + run a project (brief required, --criteria optional; --review-criteria, --foreground / --detach / --no-run)
 omoikane resume <pid>      continue a project's CTO loop with its persisted history
 omoikane open <pid>        attach the textual TUI (--start-if-stopped for daemon)
 omoikane stop <pid>        send SIGTERM to the daemon (--force escalates to SIGKILL)
@@ -119,7 +126,7 @@ omoikane migrate-from-hermes     copy ~/.hermes/omoikane/* → ~/.omoikane/*
 
 ```
 ~/.omoikane/
-├── config.toml                # [runtime] [orchestrator] [supervisor] [transport]
+├── config.toml                # [auth] [model] [transport] [supervisor]
 ├── index.db                   # SQLite project index
 ├── logs/                      # supervisor logs
 └── projects/<project_id>/
@@ -160,27 +167,15 @@ omoikane migrate-from-hermes     copy ~/.hermes/omoikane/* → ~/.omoikane/*
 
 ## Configuration
 
-`~/.omoikane/config.toml`:
+`~/.omoikane/config.toml` (this is what `omoikane onboard` writes):
 
 ```toml
-[runtime]
-model       = "anthropic/claude-sonnet-4.6"
-api_key     = "env:ANTHROPIC_API_KEY"
-base_url    = ""
-max_iterations_per_chunk = 12
+[auth]
+api_key = "env:OPENROUTER_API_KEY"   # or a literal key; "env:VAR" reads the variable
 
-[orchestrator]
-mode               = "long_session"
-inbox_poll_seconds = 2
-
-[supervisor]
-schedule                = "*/5 * * * *"
-stall_minutes           = 10
-healthy_minutes         = 3
-circuit_breaker_minutes = 60
-
-[role_toolsets]
-"agent-backend-engineer" = ["file", "terminal", "code_execution", "omoikane"]
+[model]
+id       = "openrouter/owl-alpha"
+provider = "openrouter"
 
 [transport]
 backends = ["stdout", "telegram"]
@@ -191,12 +186,19 @@ chat_id   = "-100123456789"
 
 [transport.slack]
 webhook_url = "env:SLACK_WEBHOOK_URL"
+
+[supervisor]
+schedule = "*/5 * * * *"   # cron entry, written when you install the supervisor
 ```
+
+Each value resolves CLI flag > environment variable > `config.toml` > built-in
+default. Supervisor thresholds (stall/healthy minutes, circuit breaker) are fixed
+in code; only `schedule` is read from config.
 
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -v   # 280+ passing
+.venv/bin/python -m pytest tests/ -v   # 380+ passing
 ```
 
 The suite covers every layer: Book persistence + lock semantics, the
@@ -207,6 +209,5 @@ fakes, migration sanitisation, and a textual `Pilot` smoke for the TUI.
 
 ## Acknowledgement
 
-Derived from the Hermes plugin "omoikane" by David Kulhanek (2026), with
-heavy debts to the orchestration-protocol SKILL.md briefs developed
-alongside that plugin.
+Derived from the Hermes plugin "omoikane" by David Kulhanek (2026), and from the
+orchestration-protocol SKILL.md briefs written alongside that plugin.

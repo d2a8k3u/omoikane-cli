@@ -9,7 +9,7 @@ Run `omoikane <command> --help` for full per-command flags. Global flags:
 
 | Command | Purpose |
 |---|---|
-| `start -b <brief> -c <criteria>` | Create a project and (optionally) run the CTO. `--foreground`, `--detach`, `--no-run`. |
+| `start -b <brief> [-c <criteria>]` | Create a project and (optionally) run the CTO. `-c` is optional; without it the analyst derives the criteria from the brief. `--review-criteria` pauses after derivation so you can inspect them; `--foreground`, `--detach`, `--no-run`. |
 | `resume <project-id>` | Continue an existing project's CTO loop from persisted history. |
 | `stop <project-id>` | Send SIGTERM to the daemon (`--force` escalates to SIGKILL). |
 | `open <project-id>` | Attach the live TUI (`--start-if-stopped`). |
@@ -41,7 +41,7 @@ Run `omoikane <command> --help` for full per-command flags. Global flags:
 
 | Command | Purpose |
 |---|---|
-| `init-project -b <brief> -c <criteria>` | Create a project book without running the CTO (CI helper). |
+| `init-project -b <brief> [-c <criteria>]` | Create a project book without running the CTO (CI helper). `-c` optional; omit it to have the analyst derive the criteria. |
 | `migrate-from-hermes` | Migrate legacy `~/.hermes/omoikane/*` data into `~/.omoikane/`. |
 | `self-update` | Upgrade the standalone binary. `--check`, `--force`. |
 

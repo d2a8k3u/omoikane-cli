@@ -1,22 +1,22 @@
 # omoikane-cli
 
-A standalone CLI/TUI that runs an **autonomous agent team** — it decomposes a
-project brief, runs specialist agents to do the work, and drives it toward your
-acceptance criteria. Built on the
-[hermes-agent](https://github.com/NousResearch/hermes-agent) SDK.
+A standalone CLI/TUI that runs an **autonomous agent team**. It breaks a project
+brief into tasks, runs specialist agents to do the work, and drives the project
+toward acceptance criteria you supply or that it derives from the brief. Built on
+the [hermes-agent](https://github.com/NousResearch/hermes-agent) SDK.
 
 ## Highlights
 
-- **One-command install**, no Python required — a self-contained binary with the
-  hermes-agent SDK baked in.
-- **Self-updating** — `omoikane self-update`, plus a quiet "new version available"
-  nag.
-- **Deterministic orchestration** — a background daemon drives the work task by
-  task, so even small models produce real, tested code; a supervisor watches it
-  and respawns on stalls/crashes.
-- **Operator surface** — inspect, inject messages, and approve gated actions from
-  the CLI or a live TUI.
-- **Self-contained state** — everything lives under `~/.omoikane/`.
+- **One-command install.** A self-contained binary with the hermes-agent SDK
+  bundled in, so there is no Python to set up.
+- **Self-updating.** Run `omoikane self-update`, or take the quiet "new version
+  available" prompt.
+- **Deterministic orchestration.** A background daemon drives the work task by
+  task, so even small models produce real, tested code. A supervisor watches the
+  daemon and respawns it on stalls or crashes.
+- **Operator surface.** Inspect runs, inject messages, and approve gated actions
+  from the CLI or a live TUI.
+- **Self-contained state.** Everything lives under `~/.omoikane/`.
 
 ## Install
 
