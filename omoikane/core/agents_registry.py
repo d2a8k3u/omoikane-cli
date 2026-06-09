@@ -4,9 +4,10 @@ Loads all specialized agents bundled inside the package.
 No external dependencies.
 """
 
+import re
 from importlib import resources
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 
 def _resolve_agents_path() -> Path:
@@ -27,6 +28,23 @@ AGENTS_PATH = _resolve_agents_path()
 # be surfaced as routable executors. The orchestrator's role-picker and the
 # CTO's team roster filter these out so they cannot be misrouted to.
 _LEAF_ONLY_ROLES = frozenset({"agent-manager"})
+
+# Routable (their SKILL.md loads) but never a roster line: orchestrator-protocol
+# is the loop's protocol doc, not an assignable executor. agent-manager is
+# already filtered upstream by list_routable_roles via _LEAF_ONLY_ROLES.
+_NON_ROSTER_ROLES = frozenset({"orchestrator-protocol"})
+
+# Match the ``description:`` line in a SKILL.md frontmatter so the team roster
+# stays in sync with each role's actual prompt — no separate metadata file.
+_DESC_RE = re.compile(r"^description:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def _role_description(skill_md: str) -> str:
+    """Extract the one-line role description from a SKILL.md frontmatter."""
+    if not skill_md:
+        return ""
+    m = _DESC_RE.search(skill_md)
+    return m.group(1).strip() if m else ""
 
 
 class AgentRegistry:
@@ -118,3 +136,50 @@ def reload_registry():
     global _registry
     _registry = None
     return get_registry()
+
+
+def render_team_roster(
+    book_like: Optional[Mapping[str, Any]],
+    *,
+    registry: Optional[AgentRegistry] = None,
+    exclude: Optional[str] = None,
+) -> str:
+    """Render the team roster shown to any agent that picks or suggests a role.
+
+    Each line is ``- agent-<role>: <description> (open: N, done: M)``. The
+    workload counters come from ``book_like`` (the project book dict:
+    ``task_meta`` mapped against ``open_tasks`` / ``completed_tasks``) so the
+    reader can see who is already loaded. Roles are listed ``sorted`` and
+    exclude both :data:`_LEAF_ONLY_ROLES` (via
+    :meth:`AgentRegistry.list_routable_roles`) and :data:`_NON_ROSTER_ROLES`,
+    plus the optional ``exclude`` role (used by the CTO router to drop itself).
+
+    ``book_like`` may be ``None`` or workload-free — every role then shows
+    ``(open: 0, done: 0)``.
+    """
+    registry = registry or get_registry()
+    book_like = book_like or {}
+    meta = book_like.get("task_meta", {}) or {}
+    open_set = set(book_like.get("open_tasks", []) or [])
+    done_set = set(book_like.get("completed_tasks", []) or [])
+
+    open_load: Dict[str, int] = {}
+    done_load: Dict[str, int] = {}
+    for task_id, t_meta in meta.items():
+        assignee = (t_meta or {}).get("assignee_role")
+        if not assignee:
+            continue
+        if task_id in open_set:
+            open_load[assignee] = open_load.get(assignee, 0) + 1
+        elif task_id in done_set:
+            done_load[assignee] = done_load.get(assignee, 0) + 1
+
+    lines: List[str] = []
+    for role in sorted(registry.list_routable_roles()):
+        if role == exclude or role in _NON_ROSTER_ROLES:
+            continue
+        desc = _role_description(registry.get_skill_content(role) or "")
+        open_n = open_load.get(role, 0)
+        done_n = done_load.get(role, 0)
+        lines.append(f"- {role}: {desc} (open: {open_n}, done: {done_n})")
+    return "\n".join(lines) if lines else "(no other roles available)"
